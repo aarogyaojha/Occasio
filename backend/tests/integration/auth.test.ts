@@ -25,12 +25,14 @@ describe('Auth Module Integration Tests', () => {
 
   beforeEach(async () => {
     // Clear tables before each test
+    await db('events').del();
     await db('refresh_tokens').del();
     await db('users').del();
   });
 
   afterAll(async () => {
     // Cleanup DB connection
+    await db('events').del();
     await db('refresh_tokens').del();
     await db('users').del();
     await db.destroy();
@@ -103,6 +105,14 @@ describe('Auth Module Integration Tests', () => {
 
       expect(response.status).toBe(httpStatus.BAD_REQUEST);
       expect(response.body.error.code).toBe(errorCodes.VALIDATION_ERROR);
+      expect(Array.isArray(response.body.error.details)).toBe(true);
+      expect(response.body.error.details).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            field: 'password',
+          }),
+        ])
+      );
     });
   });
 
