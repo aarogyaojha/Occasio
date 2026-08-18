@@ -6,6 +6,7 @@ import {
   httpStatus,
   REFRESH_TOKEN_COOKIE_NAME,
   REFRESH_TOKEN_EXPIRY_DAYS,
+  messages,
 } from '../../constants';
 
 const REFRESH_COOKIE_OPTIONS: CookieOptions = {
@@ -49,7 +50,7 @@ export const authController = {
     await authService.logout(rawRefreshToken);
     res.clearCookie(REFRESH_TOKEN_COOKIE_NAME, REFRESH_COOKIE_OPTIONS);
     sendResponse(res, httpStatus.OK, {
-      message: 'Logged out successfully',
+      message: messages.LOGOUT_SUCCESS,
     });
   },
 };

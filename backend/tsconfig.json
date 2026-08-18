@@ -7,6 +7,9 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
+  "ts-node": {
+    "files": true
+  },
   "include": ["src/**/*", "tests/**/*", "knexfile.ts"],
   "exclude": ["node_modules", "dist"]
 }

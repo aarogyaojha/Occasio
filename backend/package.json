@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "ts-node-dev src/server.ts",
+    "dev": "ts-node-dev --files --respawn src/server.ts",
     "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
     "db:migrate": "knex migrate:latest --knexfile knexfile.ts",

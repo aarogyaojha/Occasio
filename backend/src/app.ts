@@ -1,9 +1,11 @@
+/// <reference path="./types/express.d.ts" />
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './config/swagger';
 import authRoutes from './modules/auth/auth.routes';
+import eventRoutes from './modules/events/events.routes';
 import { errorHandler } from './middleware/error.middleware';
 
 const app = express();
@@ -17,6 +19,7 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // Routes
 app.use('/auth', authRoutes);
+app.use('/events', eventRoutes);
 
 // Central error handler (must be last)
 app.use(errorHandler);
