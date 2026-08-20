@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authController } from './auth.controller';
 import { validate } from '../../middleware/validate.middleware';
+import { authLimiter } from '../../middleware/rateLimiter.middleware';
 import { signupSchema, loginSchema } from './auth.schema';
 import { asyncHandler } from '../../utils/asyncHandler';
 
@@ -76,8 +77,14 @@ const router = Router();
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+ *       429:
+ *         description: Too many requests
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/signup', validate(signupSchema), asyncHandler(authController.signup));
+router.post('/signup', authLimiter, validate(signupSchema), asyncHandler(authController.signup));
 
 /**
  * @swagger
@@ -144,8 +151,14 @@ router.post('/signup', validate(signupSchema), asyncHandler(authController.signu
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+ *       429:
+ *         description: Too many requests
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/login', validate(loginSchema), asyncHandler(authController.login));
+router.post('/login', authLimiter, validate(loginSchema), asyncHandler(authController.login));
 
 /**
  * @swagger
@@ -183,8 +196,14 @@ router.post('/login', validate(loginSchema), asyncHandler(authController.login))
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
+ *       429:
+ *         description: Too many requests
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
-router.post('/refresh', asyncHandler(authController.refresh));
+router.post('/refresh', authLimiter, asyncHandler(authController.refresh));
 
 /**
  * @swagger
