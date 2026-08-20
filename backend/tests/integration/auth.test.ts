@@ -7,7 +7,8 @@ import db from '../../src/db/knex';
 import { authenticate } from '../../src/middleware/auth.middleware';
 import { errorHandler } from '../../src/middleware/error.middleware';
 import { sendResponse } from '../../src/utils/sendResponse';
-import { errorCodes, REFRESH_TOKEN_COOKIE_NAME, httpStatus } from '../../src/constants';
+import { resetRateLimiters } from '../../src/middleware/rateLimiter.middleware';
+import { errorCodes, errorMessages, REFRESH_TOKEN_COOKIE_NAME, httpStatus } from '../../src/constants';
 
 describe('Auth Module Integration Tests', () => {
   // Test app for protected route verification
@@ -24,7 +25,8 @@ describe('Auth Module Integration Tests', () => {
   testApp.use(errorHandler);
 
   beforeEach(async () => {
-    // Clear tables before each test
+    // Reset rate limiter counters and clear tables before each test
+    resetRateLimiters();
     await db('events').del();
     await db('refresh_tokens').del();
     await db('users').del();
@@ -167,6 +169,37 @@ describe('Auth Module Integration Tests', () => {
 
       expect(response.status).toBe(httpStatus.UNAUTHORIZED);
       expect(response.body.error.code).toBe(errorCodes.AUTH_INVALID_CREDENTIALS);
+    });
+
+    it('should return 429 Too Many Requests on the 6th consecutive attempt with wrong credentials', async () => {
+      resetRateLimiters();
+      // First 5 attempts with wrong credentials return 401 Unauthorized
+      for (let i = 0; i < 5; i++) {
+        const response = await request(app)
+          .post('/auth/login')
+          .send({
+            email: 'login@example.com',
+            password: 'wrongpassword',
+          });
+        expect(response.status).toBe(httpStatus.UNAUTHORIZED);
+        expect(response.body.error.code).toBe(errorCodes.AUTH_INVALID_CREDENTIALS);
+      }
+
+      // 6th attempt returns 429 TOO_MANY_REQUESTS with standard error envelope shape
+      const limitedResponse = await request(app)
+        .post('/auth/login')
+        .send({
+          email: 'login@example.com',
+          password: 'wrongpassword',
+        });
+
+      expect(limitedResponse.status).toBe(httpStatus.TOO_MANY_REQUESTS);
+      expect(limitedResponse.body).toEqual({
+        error: {
+          code: errorCodes.RATE_LIMITED,
+          message: errorMessages[errorCodes.RATE_LIMITED],
+        },
+      });
     });
   });
 

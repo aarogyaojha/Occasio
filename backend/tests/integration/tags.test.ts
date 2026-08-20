@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import request from 'supertest';
 import app from '../../src/app';
 import db from '../../src/db/knex';
+import { resetRateLimiters } from '../../src/middleware/rateLimiter.middleware';
 import { httpStatus } from '../../src/constants';
 
 describe('Tags Module Integration Tests', () => {
@@ -9,7 +10,8 @@ describe('Tags Module Integration Tests', () => {
   let userId: number;
 
   beforeEach(async () => {
-    // Clear tables before each test
+    // Reset rate limiters and clear tables before each test
+    resetRateLimiters();
     await db('event_tags').del();
     await db('tags').del();
     await db('events').del();
