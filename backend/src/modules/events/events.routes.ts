@@ -11,15 +11,62 @@ const router = Router();
  * @swagger
  * /events:
  *   get:
- *     summary: Retrieve a list of all visible events (public events + private events owned by caller)
+ *     summary: Retrieve a paginated list of visible events with optional filtering, search, and sorting
  *     tags:
  *       - Events
  *     security:
  *       - {}
  *       - BearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: Page number for pagination
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 50
+ *           default: 10
+ *         description: Number of records per page
+ *       - in: query
+ *         name: tags
+ *         schema:
+ *           type: string
+ *         description: Comma-separated list of tag names (matches any of the specified tags)
+ *         example: tech,conference
+ *       - in: query
+ *         name: type
+ *         schema:
+ *           type: string
+ *           enum: [public, private]
+ *         description: Filter by event type
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search term matching title, description, or location
+ *       - in: query
+ *         name: sortBy
+ *         schema:
+ *           type: string
+ *           enum: [date, created_at]
+ *           default: date
+ *         description: Field to sort by (date maps to start_datetime)
+ *       - in: query
+ *         name: sortOrder
+ *         schema:
+ *           type: string
+ *           enum: [asc, desc]
+ *           default: asc
+ *         description: Sort direction
  *     responses:
  *       200:
- *         description: List of events retrieved successfully
+ *         description: Paginated list of events retrieved successfully
  *         content:
  *           application/json:
  *             schema:
@@ -29,44 +76,67 @@ const router = Router();
  *                   type: boolean
  *                   example: true
  *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                         example: 1
+ *                       title:
+ *                         type: string
+ *                         example: Tech Conference 2026
+ *                       description:
+ *                         type: string
+ *                         nullable: true
+ *                         example: Annual technology conference
+ *                       start_datetime:
+ *                         type: string
+ *                         format: date-time
+ *                         example: 2026-09-01T10:00:00.000Z
+ *                       location:
+ *                         type: string
+ *                         nullable: true
+ *                         example: Convention Center, Hall A
+ *                       event_type:
+ *                         type: string
+ *                         enum: [public, private]
+ *                         example: public
+ *                       creator_id:
+ *                         type: integer
+ *                         example: 1
+ *                       created_at:
+ *                         type: string
+ *                         format: date-time
+ *                       updated_at:
+ *                         type: string
+ *                         format: date-time
+ *                       tags:
+ *                         type: array
+ *                         items:
+ *                           type: string
+ *                         example: [tech, web]
+ *                 meta:
  *                   type: object
  *                   properties:
- *                     events:
- *                       type: array
- *                       items:
- *                         type: object
- *                         properties:
- *                           id:
- *                             type: integer
- *                             example: 1
- *                           title:
- *                             type: string
- *                             example: Tech Conference 2026
- *                           description:
- *                             type: string
- *                             nullable: true
- *                             example: Annual technology conference
- *                           start_datetime:
- *                             type: string
- *                             format: date-time
- *                             example: 2026-09-01T10:00:00.000Z
- *                           location:
- *                             type: string
- *                             nullable: true
- *                             example: Convention Center, Hall A
- *                           event_type:
- *                             type: string
- *                             enum: [public, private]
- *                             example: public
- *                           creator_id:
- *                             type: integer
- *                             example: 1
- *                           created_at:
- *                             type: string
- *                             format: date-time
- *                           updated_at:
- *                             type: string
- *                             format: date-time
+ *                     page:
+ *                       type: integer
+ *                       example: 1
+ *                     limit:
+ *                       type: integer
+ *                       example: 10
+ *                     total:
+ *                       type: integer
+ *                       example: 25
+ *                     totalPages:
+ *                       type: integer
+ *                       example: 3
+ *       400:
+ *         description: Validation error in query parameters
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get('/', optionalAuth, asyncHandler(eventsController.list));
 
@@ -128,6 +198,11 @@ router.get('/', optionalAuth, asyncHandler(eventsController.list));
  *                         updated_at:
  *                           type: string
  *                           format: date-time
+ *                         tags:
+ *                           type: array
+ *                           items:
+ *                               type: string
+ *                           example: [tech, conference]
  *       404:
  *         description: Event not found
  *         content:
@@ -141,7 +216,7 @@ router.get('/:id', optionalAuth, asyncHandler(eventsController.getById));
  * @swagger
  * /events:
  *   post:
- *     summary: Create a new event
+ *     summary: Create a new event with optional tags
  *     tags:
  *       - Events
  *     security:
@@ -177,6 +252,11 @@ router.get('/:id', optionalAuth, asyncHandler(eventsController.getById));
  *                 enum: [public, private]
  *                 default: public
  *                 example: public
+ *               tags:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 example: [technology, programming]
  *     responses:
  *       201:
  *         description: Event created successfully
@@ -218,6 +298,11 @@ router.get('/:id', optionalAuth, asyncHandler(eventsController.getById));
  *                         updated_at:
  *                           type: string
  *                           format: date-time
+ *                         tags:
+ *                           type: array
+ *                           items:
+ *                             type: string
+ *                           example: [technology, programming]
  *       400:
  *         description: Validation error
  *         content:
@@ -242,7 +327,7 @@ router.post(
  * @swagger
  * /events/{id}:
  *   put:
- *     summary: Update an existing event (creator only)
+ *     summary: Update an existing event and its tags (creator only)
  *     tags:
  *       - Events
  *     security:
@@ -281,6 +366,11 @@ router.post(
  *                 type: string
  *                 enum: [public, private]
  *                 example: private
+ *               tags:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 example: [tech, ai]
  *     responses:
  *       200:
  *         description: Event updated successfully
@@ -322,6 +412,10 @@ router.post(
  *                         updated_at:
  *                           type: string
  *                           format: date-time
+ *                         tags:
+ *                           type: array
+ *                           items:
+ *                             type: string
  *       400:
  *         description: Validation error
  *         content:
