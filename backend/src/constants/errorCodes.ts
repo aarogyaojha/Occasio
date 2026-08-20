@@ -9,6 +9,7 @@ export const errorCodes = {
   FORBIDDEN_NOT_OWNER: 'FORBIDDEN_NOT_OWNER',
   NOT_FOUND: 'NOT_FOUND',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
+  RATE_LIMITED: 'RATE_LIMITED',
 } as const;
 
 export type ErrorCode = typeof errorCodes[keyof typeof errorCodes];

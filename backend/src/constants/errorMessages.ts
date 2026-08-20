@@ -11,4 +11,5 @@ export const errorMessages: Record<ErrorCode, string> = {
   [errorCodes.FORBIDDEN_NOT_OWNER]: 'You do not have permission to access or modify this resource',
   [errorCodes.NOT_FOUND]: 'Resource not found',
   [errorCodes.INTERNAL_ERROR]: 'Internal server error',
+  [errorCodes.RATE_LIMITED]: 'Too many requests, please try again later',
 };
