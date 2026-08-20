@@ -6,6 +6,7 @@ import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './config/swagger';
 import authRoutes from './modules/auth/auth.routes';
 import eventRoutes from './modules/events/events.routes';
+import tagRoutes from './modules/tags/tags.routes';
 import { errorHandler } from './middleware/error.middleware';
 
 const app = express();
@@ -20,6 +21,7 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 // Routes
 app.use('/auth', authRoutes);
 app.use('/events', eventRoutes);
+app.use('/tags', tagRoutes);
 
 // Central error handler (must be last)
 app.use(errorHandler);
