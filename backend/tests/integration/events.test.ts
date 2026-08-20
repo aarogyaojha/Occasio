@@ -12,6 +12,8 @@ describe('Events Module Integration Tests', () => {
 
   beforeEach(async () => {
     // Clear tables before each test
+    await db('event_tags').del();
+    await db('tags').del();
     await db('events').del();
     await db('refresh_tokens').del();
     await db('users').del();
@@ -41,6 +43,8 @@ describe('Events Module Integration Tests', () => {
 
   afterAll(async () => {
     // Cleanup DB connection
+    await db('event_tags').del();
+    await db('tags').del();
     await db('events').del();
     await db('refresh_tokens').del();
     await db('users').del();
@@ -48,13 +52,14 @@ describe('Events Module Integration Tests', () => {
   });
 
   describe('POST /events', () => {
-    it('should create an event successfully when authenticated and set correct creator_id', async () => {
+    it('should create an event successfully when authenticated and set correct creator_id and tags', async () => {
       const eventData = {
         title: 'Community Tech Meetup',
         description: 'A meetup for local developers',
         start_datetime: '2026-09-15T18:00:00.000Z',
         location: 'Tech Hub Room 101',
         event_type: 'public',
+        tags: ['javascript', 'networking'],
       };
 
       const response = await request(app)
@@ -71,6 +76,7 @@ describe('Events Module Integration Tests', () => {
       expect(response.body.data.event.location).toBe(eventData.location);
       expect(response.body.data.event.event_type).toBe('public');
       expect(response.body.data.event.creator_id).toBe(user1Id);
+      expect(response.body.data.event.tags).toEqual(['javascript', 'networking']);
 
       // Verify in DB
       const eventInDb = await db('events').where({ id: response.body.data.event.id }).first();
@@ -116,8 +122,7 @@ describe('Events Module Integration Tests', () => {
   });
 
   describe('GET /events/:id', () => {
-    it('should retrieve a single event by id successfully', async () => {
-      // Create an event first
+    it('should retrieve a single event by id successfully with tags', async () => {
       const createRes = await request(app)
         .post('/events')
         .set('Authorization', `Bearer ${user1Token}`)
@@ -127,6 +132,7 @@ describe('Events Module Integration Tests', () => {
           start_datetime: '2026-10-01T14:00:00.000Z',
           location: 'Studio 4',
           event_type: 'public',
+          tags: ['design', 'ui'],
         });
 
       const eventId = createRes.body.data.event.id;
@@ -140,6 +146,7 @@ describe('Events Module Integration Tests', () => {
       expect(response.body.data.event.id).toBe(eventId);
       expect(response.body.data.event.title).toBe('Design Workshop');
       expect(response.body.data.event.creator_id).toBe(user1Id);
+      expect(response.body.data.event.tags).toEqual(['design', 'ui']);
     });
 
     it('should return 404 for non-existent event id', async () => {
@@ -151,38 +158,8 @@ describe('Events Module Integration Tests', () => {
     });
   });
 
-  describe('GET /events', () => {
-    it('should list all events as an array', async () => {
-      // Create 2 events
-      await request(app)
-        .post('/events')
-        .set('Authorization', `Bearer ${user1Token}`)
-        .send({
-          title: 'Event Early',
-          start_datetime: '2026-09-01T10:00:00.000Z',
-        });
-
-      await request(app)
-        .post('/events')
-        .set('Authorization', `Bearer ${user2Token}`)
-        .send({
-          title: 'Event Later',
-          start_datetime: '2026-09-10T10:00:00.000Z',
-        });
-
-      const response = await request(app).get('/events');
-
-      expect(response.status).toBe(httpStatus.OK);
-      expect(response.body.success).toBe(true);
-      expect(Array.isArray(response.body.data.events)).toBe(true);
-      expect(response.body.data.events.length).toBe(2);
-      expect(response.body.data.events[0].title).toBe('Event Early');
-      expect(response.body.data.events[1].title).toBe('Event Later');
-    });
-  });
-
   describe('PUT /events/:id', () => {
-    it('should allow the creator to update the event', async () => {
+    it('should allow the creator to update the event and its tags', async () => {
       const createRes = await request(app)
         .post('/events')
         .set('Authorization', `Bearer ${user1Token}`)
@@ -191,6 +168,7 @@ describe('Events Module Integration Tests', () => {
           description: 'Original description',
           start_datetime: '2026-11-01T10:00:00.000Z',
           location: 'Room A',
+          tags: ['initial'],
         });
 
       const eventId = createRes.body.data.event.id;
@@ -202,6 +180,7 @@ describe('Events Module Integration Tests', () => {
           title: 'Updated Event Title',
           location: 'Room B',
           event_type: 'private',
+          tags: ['updated', 'v2'],
         });
 
       expect(updateRes.status).toBe(httpStatus.OK);
@@ -210,6 +189,7 @@ describe('Events Module Integration Tests', () => {
       expect(updateRes.body.data.event.location).toBe('Room B');
       expect(updateRes.body.data.event.event_type).toBe('private');
       expect(updateRes.body.data.event.description).toBe('Original description');
+      expect(updateRes.body.data.event.tags).toEqual(['updated', 'v2']);
     });
 
     it('should reject update by a different authenticated user with 403', async () => {
@@ -223,7 +203,6 @@ describe('Events Module Integration Tests', () => {
 
       const eventId = createRes.body.data.event.id;
 
-      // Bob tries to update Alice's event
       const updateRes = await request(app)
         .put(`/events/${eventId}`)
         .set('Authorization', `Bearer ${user2Token}`)
@@ -245,6 +224,7 @@ describe('Events Module Integration Tests', () => {
         .send({
           title: 'Event To Delete',
           start_datetime: '2026-12-01T10:00:00.000Z',
+          tags: ['temporary'],
         });
 
       const eventId = createRes.body.data.event.id;
@@ -260,6 +240,10 @@ describe('Events Module Integration Tests', () => {
       // Verify event is deleted in DB / 404 on get
       const getRes = await request(app).get(`/events/${eventId}`);
       expect(getRes.status).toBe(httpStatus.NOT_FOUND);
+
+      // Verify junction table rows are deleted via CASCADE
+      const junctionRows = await db('event_tags').where({ event_id: eventId });
+      expect(junctionRows.length).toBe(0);
     });
 
     it('should reject deletion by a different authenticated user with 403', async () => {
@@ -273,7 +257,6 @@ describe('Events Module Integration Tests', () => {
 
       const eventId = createRes.body.data.event.id;
 
-      // Bob tries to delete Alice's event
       const deleteRes = await request(app)
         .delete(`/events/${eventId}`)
         .set('Authorization', `Bearer ${user2Token}`);
@@ -282,15 +265,229 @@ describe('Events Module Integration Tests', () => {
       expect(deleteRes.body.error).toBeDefined();
       expect(deleteRes.body.error.code).toBe(errorCodes.FORBIDDEN_NOT_OWNER);
 
-      // Verify event still exists in DB
       const eventInDb = await db('events').where({ id: eventId }).first();
       expect(eventInDb).toBeDefined();
     });
   });
 
+  describe('GET /events - Pagination, Filtering, Search, Sorting', () => {
+    beforeEach(async () => {
+      // Seed 4 events for comprehensive filter/search/sort tests
+      // Event 1: Alice Public, tags: tech, ai, start: 2026-09-01
+      await request(app)
+        .post('/events')
+        .set('Authorization', `Bearer ${user1Token}`)
+        .send({
+          title: 'Alpha AI Conference',
+          description: 'Deep dive into machine learning and neural networks',
+          location: 'San Francisco Convention Center',
+          start_datetime: '2026-09-01T09:00:00.000Z',
+          event_type: 'public',
+          tags: ['tech', 'ai'],
+        });
+
+      // Event 2: Alice Private, tags: internal, confidential, start: 2026-09-10
+      await request(app)
+        .post('/events')
+        .set('Authorization', `Bearer ${user1Token}`)
+        .send({
+          title: 'Beta Secret Strategy Meeting',
+          description: 'Quarterly internal product roadmap discussion',
+          location: 'HQ Boardroom',
+          start_datetime: '2026-09-10T14:00:00.000Z',
+          event_type: 'private',
+          tags: ['internal', 'strategy'],
+        });
+
+      // Event 3: Bob Public, tags: tech, web, start: 2026-09-20
+      await request(app)
+        .post('/events')
+        .set('Authorization', `Bearer ${user2Token}`)
+        .send({
+          title: 'Gamma Web Summit',
+          description: 'Frontend and backend modern web technologies',
+          location: 'Austin Tech Center',
+          start_datetime: '2026-09-20T10:00:00.000Z',
+          event_type: 'public',
+          tags: ['tech', 'web'],
+        });
+
+      // Event 4: Bob Private, tags: strategy, start: 2026-09-30
+      await request(app)
+        .post('/events')
+        .set('Authorization', `Bearer ${user2Token}`)
+        .send({
+          title: 'Delta Executive Dinner',
+          description: 'Private networking dinner for executives',
+          location: 'The French Laundry',
+          start_datetime: '2026-09-30T19:00:00.000Z',
+          event_type: 'private',
+          tags: ['strategy'],
+        });
+    });
+
+    it('should return paginated list of events with correct metadata envelope', async () => {
+      const response = await request(app).get('/events');
+
+      expect(response.status).toBe(httpStatus.OK);
+      expect(response.body.success).toBe(true);
+      expect(Array.isArray(response.body.data)).toBe(true);
+      expect(response.body.data.length).toBe(2); // Only public events for anonymous
+      expect(response.body.meta).toEqual({
+        page: 1,
+        limit: 10,
+        total: 2,
+        totalPages: 1,
+      });
+    });
+
+    it('GET /events?tags=X returns only events with tag X with any-match semantics and no duplicate rows', async () => {
+      // Request events with tag 'tech' - should match Event 1 (tech, ai) and Event 3 (tech, web)
+      const res = await request(app).get('/events?tags=tech');
+
+      expect(res.status).toBe(httpStatus.OK);
+      expect(res.body.data.length).toBe(2);
+      const titles = res.body.data.map((e: { title: string }) => e.title);
+      expect(titles).toContain('Alpha AI Conference');
+      expect(titles).toContain('Gamma Web Summit');
+
+      // Request events with tags 'ai,web' - any tag matches semantics
+      const resMulti = await request(app).get('/events?tags=ai,web');
+      expect(resMulti.status).toBe(httpStatus.OK);
+      expect(resMulti.body.data.length).toBe(2);
+
+      // Event with multiple matching tags shouldn't duplicate
+      const resOverlap = await request(app).get('/events?tags=tech,ai');
+      expect(resOverlap.status).toBe(httpStatus.OK);
+      expect(resOverlap.body.data.length).toBe(2);
+      const event1Matches = resOverlap.body.data.filter((e: { title: string }) => e.title === 'Alpha AI Conference');
+      expect(event1Matches.length).toBe(1);
+    });
+
+    it('GET /events?type=private with visibility rules still enforced', async () => {
+      // Anonymous user querying type=private -> gets 0 events because private events not visible
+      const anonRes = await request(app).get('/events?type=private');
+      expect(anonRes.status).toBe(httpStatus.OK);
+      expect(anonRes.body.data).toEqual([]);
+      expect(anonRes.body.meta.total).toBe(0);
+
+      // User 1 querying type=private -> gets only Alice's private event (Event 2), NOT Bob's private event (Event 4)
+      const user1Res = await request(app)
+        .get('/events?type=private')
+        .set('Authorization', `Bearer ${user1Token}`);
+
+      expect(user1Res.status).toBe(httpStatus.OK);
+      expect(user1Res.body.data.length).toBe(1);
+      expect(user1Res.body.data[0].title).toBe('Beta Secret Strategy Meeting');
+      expect(user1Res.body.data[0].creator_id).toBe(user1Id);
+
+      // User 2 querying type=private -> gets only Bob's private event (Event 4)
+      const user2Res = await request(app)
+        .get('/events?type=private')
+        .set('Authorization', `Bearer ${user2Token}`);
+
+      expect(user2Res.status).toBe(httpStatus.OK);
+      expect(user2Res.body.data.length).toBe(1);
+      expect(user2Res.body.data[0].title).toBe('Delta Executive Dinner');
+      expect(user2Res.body.data[0].creator_id).toBe(user2Id);
+    });
+
+    it('GET /events?search=... matches on title/description/location', async () => {
+      // Match by title
+      const titleMatchRes = await request(app).get('/events?search=Alpha');
+      expect(titleMatchRes.status).toBe(httpStatus.OK);
+      expect(titleMatchRes.body.data.length).toBe(1);
+      expect(titleMatchRes.body.data[0].title).toBe('Alpha AI Conference');
+
+      // Match by description
+      const descMatchRes = await request(app).get('/events?search=machine learning');
+      expect(descMatchRes.status).toBe(httpStatus.OK);
+      expect(descMatchRes.body.data.length).toBe(1);
+      expect(descMatchRes.body.data[0].title).toBe('Alpha AI Conference');
+
+      // Match by location
+      const locMatchRes = await request(app).get('/events?search=Austin');
+      expect(locMatchRes.status).toBe(httpStatus.OK);
+      expect(locMatchRes.body.data.length).toBe(1);
+      expect(locMatchRes.body.data[0].title).toBe('Gamma Web Summit');
+    });
+
+    it('GET /events?page=2&limit=1 returns correct meta (total, totalPages) and correct slice', async () => {
+      // User 1 sees 3 visible events (Event 1, Event 2, Event 3)
+      const page1Res = await request(app)
+        .get('/events?page=1&limit=1')
+        .set('Authorization', `Bearer ${user1Token}`);
+
+      expect(page1Res.status).toBe(httpStatus.OK);
+      expect(page1Res.body.data.length).toBe(1);
+      expect(page1Res.body.meta).toEqual({
+        page: 1,
+        limit: 1,
+        total: 3,
+        totalPages: 3,
+      });
+      expect(page1Res.body.data[0].title).toBe('Alpha AI Conference');
+
+      const page2Res = await request(app)
+        .get('/events?page=2&limit=1')
+        .set('Authorization', `Bearer ${user1Token}`);
+
+      expect(page2Res.status).toBe(httpStatus.OK);
+      expect(page2Res.body.data.length).toBe(1);
+      expect(page2Res.body.meta).toEqual({
+        page: 2,
+        limit: 1,
+        total: 3,
+        totalPages: 3,
+      });
+      expect(page2Res.body.data[0].title).toBe('Beta Secret Strategy Meeting');
+
+      const page3Res = await request(app)
+        .get('/events?page=3&limit=1')
+        .set('Authorization', `Bearer ${user1Token}`);
+
+      expect(page3Res.status).toBe(httpStatus.OK);
+      expect(page3Res.body.data.length).toBe(1);
+      expect(page3Res.body.meta).toEqual({
+        page: 3,
+        limit: 1,
+        total: 3,
+        totalPages: 3,
+      });
+      expect(page3Res.body.data[0].title).toBe('Gamma Web Summit');
+    });
+
+    it('default sort is start_datetime ascending; sortBy=created_at works', async () => {
+      // Default sort (start_datetime asc)
+      const defaultSortRes = await request(app).get('/events');
+      expect(defaultSortRes.status).toBe(httpStatus.OK);
+      expect(defaultSortRes.body.data[0].title).toBe('Alpha AI Conference'); // Sep 1
+      expect(defaultSortRes.body.data[1].title).toBe('Gamma Web Summit'); // Sep 20
+
+      // Sort by date desc
+      const dateDescRes = await request(app).get('/events?sortBy=date&sortOrder=desc');
+      expect(dateDescRes.status).toBe(httpStatus.OK);
+      expect(dateDescRes.body.data[0].title).toBe('Gamma Web Summit');
+      expect(dateDescRes.body.data[1].title).toBe('Alpha AI Conference');
+
+      // Sort by created_at desc
+      const createdDescRes = await request(app).get('/events?sortBy=created_at&sortOrder=desc');
+      expect(createdDescRes.status).toBe(httpStatus.OK);
+      expect(createdDescRes.body.data[0].title).toBe('Gamma Web Summit'); // created last among public
+      expect(createdDescRes.body.data[1].title).toBe('Alpha AI Conference'); // created first among public
+    });
+
+    it('should reject invalid query parameters with 400 Bad Request and validation details', async () => {
+      const invalidRes = await request(app).get('/events?sortBy=invalidField');
+      expect(invalidRes.status).toBe(httpStatus.BAD_REQUEST);
+      expect(invalidRes.body.error).toBeDefined();
+      expect(invalidRes.body.error.code).toBe(errorCodes.VALIDATION_ERROR);
+      expect(Array.isArray(invalidRes.body.error.details)).toBe(true);
+    });
+  });
+
   describe('Private Event Visibility Rules', () => {
     it('should make private event created by user A invisible in user B GET /events list, but visible to user A', async () => {
-      // User A creates a private event and a public event
       const privateRes = await request(app)
         .post('/events')
         .set('Authorization', `Bearer ${user1Token}`)
@@ -318,7 +515,7 @@ describe('Events Module Integration Tests', () => {
         .set('Authorization', `Bearer ${user2Token}`);
 
       expect(userBListRes.status).toBe(httpStatus.OK);
-      const userBEvents = userBListRes.body.data.events;
+      const userBEvents = userBListRes.body.data;
       expect(userBEvents.some((e: { id: number }) => e.id === privateEventId)).toBe(false);
       expect(userBEvents.some((e: { id: number }) => e.id === publicEventId)).toBe(true);
 
@@ -328,7 +525,7 @@ describe('Events Module Integration Tests', () => {
         .set('Authorization', `Bearer ${user1Token}`);
 
       expect(userAListRes.status).toBe(httpStatus.OK);
-      const userAEvents = userAListRes.body.data.events;
+      const userAEvents = userAListRes.body.data;
       expect(userAEvents.some((e: { id: number }) => e.id === privateEventId)).toBe(true);
       expect(userAEvents.some((e: { id: number }) => e.id === publicEventId)).toBe(true);
     });
@@ -390,7 +587,7 @@ describe('Events Module Integration Tests', () => {
       // Unauthenticated list request
       const anonListRes = await request(app).get('/events');
       expect(anonListRes.status).toBe(httpStatus.OK);
-      const anonEvents = anonListRes.body.data.events;
+      const anonEvents = anonListRes.body.data;
       expect(anonEvents.some((e: { id: number }) => e.id === privateEventId)).toBe(false);
       expect(anonEvents.some((e: { id: number }) => e.id === publicEventId)).toBe(true);
 
