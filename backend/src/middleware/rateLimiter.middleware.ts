@@ -1,6 +1,8 @@
+import { Request, Response, NextFunction } from 'express';
 import rateLimit, { MemoryStore } from 'express-rate-limit';
 import { AppError } from '../utils/AppError';
 import { httpStatus, errorCodes, errorMessages } from '../constants';
+import { isDevelopment } from '../config/env';
 
 const authStore = new MemoryStore();
 const generalStore = new MemoryStore();
@@ -10,9 +12,9 @@ const generalStore = new MemoryStore();
  * by forwarding an AppError with the standard envelope format and RATE_LIMITED code.
  */
 const rateLimitHandler = (
-  _req: Parameters<NonNullable<Parameters<typeof rateLimit>[0]>['handler']>[0],
-  _res: Parameters<NonNullable<Parameters<typeof rateLimit>[0]>['handler']>[1],
-  next: Parameters<NonNullable<Parameters<typeof rateLimit>[0]>['handler']>[2]
+  _req: Request,
+  _res: Response,
+  next: NextFunction
 ): void => {
   next(
     new AppError(
@@ -25,11 +27,11 @@ const rateLimitHandler = (
 
 /**
  * Strict rate limiter for sensitive authentication endpoints (signup, login, refresh).
- * Limits requests to 5 per 15-minute window per IP.
+ * Limits requests to 5 per 15-minute window per IP in production, higher in development.
  */
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5,
+  max: isDevelopment ? 100 : 5,
   standardHeaders: true,
   legacyHeaders: false,
   store: authStore,
