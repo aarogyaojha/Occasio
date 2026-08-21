@@ -3,6 +3,8 @@ import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import swaggerUi from 'swagger-ui-express';
+import { isProduction } from './config/env';
+import { messages } from './constants';
 import { swaggerSpec } from './config/swagger';
 import { generalLimiter } from './middleware/rateLimiter.middleware';
 import authRoutes from './modules/auth/auth.routes';
@@ -12,7 +14,24 @@ import { errorHandler } from './middleware/error.middleware';
 
 const app = express();
 
-app.use(cors());
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+];
+
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps, curl, postman)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin) || !isProduction) {
+        return callback(null, true);
+      }
+      return callback(new Error(messages.CORS_NOT_ALLOWED));
+    },
+    credentials: true,
+  })
+);
 app.use(cookieParser());
 app.use(express.json());
 
