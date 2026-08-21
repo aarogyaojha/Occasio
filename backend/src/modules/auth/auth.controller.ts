@@ -53,4 +53,9 @@ export const authController = {
       message: messages.LOGOUT_SUCCESS,
     });
   },
+
+  async me(req: Request, res: Response): Promise<void> {
+    const user = await authService.getCurrentUser(req.user!.id);
+    sendResponse(res, httpStatus.OK, user);
+  },
 };

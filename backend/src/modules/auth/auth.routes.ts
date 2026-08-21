@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authController } from './auth.controller';
 import { validate } from '../../middleware/validate.middleware';
 import { authLimiter } from '../../middleware/rateLimiter.middleware';
+import { authenticate } from '../../middleware/auth.middleware';
 import { signupSchema, loginSchema } from './auth.schema';
 import { asyncHandler } from '../../utils/asyncHandler';
 
@@ -238,5 +239,46 @@ router.post('/refresh', authLimiter, asyncHandler(authController.refresh));
  *                       example: Logged out successfully
  */
 router.post('/logout', asyncHandler(authController.logout));
+
+/**
+ * @swagger
+ * /auth/me:
+ *   get:
+ *     summary: Get current authenticated user profile
+ *     tags:
+ *       - Auth
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Current user profile fetched successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: integer
+ *                     name:
+ *                       type: string
+ *                     email:
+ *                       type: string
+ *                     created_at:
+ *                       type: string
+ *                       format: date-time
+ *       401:
+ *         description: Unauthorized
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+router.get('/me', authenticate, asyncHandler(authController.me));
 
 export default router;

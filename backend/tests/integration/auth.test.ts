@@ -305,4 +305,37 @@ describe('Auth Module Integration Tests', () => {
       expect(refreshRes.body.error.code).toBe(errorCodes.AUTH_TOKEN_INVALID);
     });
   });
+
+  describe('GET /auth/me', () => {
+    it('should return current user profile when authenticated', async () => {
+      const signupRes = await request(app)
+        .post('/auth/signup')
+        .send({
+          name: 'Me User',
+          email: 'me@example.com',
+          password: 'password123',
+        });
+
+      const token = signupRes.body.data.accessToken;
+
+      const meRes = await request(app)
+        .get('/auth/me')
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(meRes.status).toBe(httpStatus.OK);
+      expect(meRes.body.success).toBe(true);
+      expect(meRes.body.data).toMatchObject({
+        name: 'Me User',
+        email: 'me@example.com',
+      });
+      expect(meRes.body.data).not.toHaveProperty('password_hash');
+    });
+
+    it('should reject unauthenticated request with 401 Unauthorized', async () => {
+      const response = await request(app).get('/auth/me');
+
+      expect(response.status).toBe(httpStatus.UNAUTHORIZED);
+      expect(response.body.error.code).toBe(errorCodes.AUTH_TOKEN_INVALID);
+    });
+  });
 });

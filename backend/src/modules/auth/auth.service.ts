@@ -207,4 +207,25 @@ export const authService = {
       await authRepository.revokeRefreshToken(storedToken.id);
     }
   },
+
+  /**
+   * Retrieves details for the currently authenticated user by ID (omitting password hash).
+   *
+   * @param userId - Primary key ID of the user.
+   * @returns The user object without password_hash.
+   * @throws AppError 404 if user not found.
+   */
+  async getCurrentUser(userId: number): Promise<Omit<User, 'password_hash'>> {
+    const user = await authRepository.findUserById(userId);
+    if (!user) {
+      throw new AppError(
+        httpStatus.NOT_FOUND,
+        errorMessages[errorCodes.NOT_FOUND],
+        errorCodes.NOT_FOUND
+      );
+    }
+
+    const { password_hash, ...userWithoutPassword } = user;
+    return userWithoutPassword;
+  },
 };
