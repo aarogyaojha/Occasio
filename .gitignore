@@ -1,8 +1,9 @@
 # Dependencies
 node_modules/
 
-# Production build outputs
+# Production build outputs & cache
 dist/
+.vite/
 
 # Environment files
 .env
