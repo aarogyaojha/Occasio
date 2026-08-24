@@ -138,5 +138,43 @@ describe('Tags Module Integration Tests', () => {
       expect(event1TechLink).toBeDefined();
       expect(event2TechLink).toBeDefined();
     });
+
+    it('creating events with "Tech" then "tech" reuses the same tag id case-insensitively', async () => {
+      const res1 = await request(app)
+        .post('/events')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({
+          title: 'Tech Conference 1',
+          start_datetime: '2026-12-01T10:00:00.000Z',
+          tags: ['Tech'],
+        });
+      expect(res1.status).toBe(httpStatus.CREATED);
+
+      const res2 = await request(app)
+        .post('/events')
+        .set('Authorization', `Bearer ${userToken}`)
+        .send({
+          title: 'Tech Conference 2',
+          start_datetime: '2026-12-02T10:00:00.000Z',
+          tags: ['tech'],
+        });
+      expect(res2.status).toBe(httpStatus.CREATED);
+
+      // Verify that only 1 tag exists in the database ("Tech")
+      const tagsInDb = await db('tags');
+      expect(tagsInDb.length).toBe(1);
+      expect(tagsInDb[0].name).toBe('Tech');
+
+      // Verify both events link to the exact same tag id
+      const tagId = tagsInDb[0].id;
+      const event1Id = res1.body.data.event.id;
+      const event2Id = res2.body.data.event.id;
+
+      const event1Link = await db('event_tags').where({ event_id: event1Id, tag_id: tagId }).first();
+      const event2Link = await db('event_tags').where({ event_id: event2Id, tag_id: tagId }).first();
+
+      expect(event1Link).toBeDefined();
+      expect(event2Link).toBeDefined();
+    });
   });
 });
