@@ -7,7 +7,10 @@ import { AuthInitializer } from './features/auth/AuthInitializer';
 import { LoginPage } from './routes/LoginPage';
 import { SignupPage } from './routes/SignupPage';
 import { ProtectedRoute } from './routes/ProtectedRoute';
-import { EventsPlaceholder } from './routes/EventsPlaceholder';
+import { EventsListPage } from './routes/EventsListPage';
+import { EventDetailPage } from './routes/EventDetailPage';
+import { CreateEventPage } from './routes/CreateEventPage';
+import { EditEventPage } from './routes/EditEventPage';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -31,7 +34,10 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
               <Route path="login" element={<LoginPage />} />
               <Route path="signup" element={<SignupPage />} />
               <Route element={<ProtectedRoute />}>
-                <Route path="events" element={<EventsPlaceholder />} />
+                <Route path="events" element={<EventsListPage />} />
+                <Route path="events/new" element={<CreateEventPage />} />
+                <Route path="events/:id" element={<EventDetailPage />} />
+                <Route path="events/:id/edit" element={<EditEventPage />} />
               </Route>
               <Route path="*" element={<Navigate to="/events" replace />} />
             </Route>
