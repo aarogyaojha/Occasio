@@ -2,6 +2,7 @@
 import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
+import morgan from 'morgan';
 import swaggerUi from 'swagger-ui-express';
 import { isProduction } from './config/env';
 import { messages } from './constants';
@@ -18,6 +19,8 @@ const allowedOrigins = [
   'http://localhost:5173',
   'http://127.0.0.1:5173',
 ];
+
+app.use(morgan(isProduction ? 'combined' : 'dev'));
 
 app.use(
   cors({
