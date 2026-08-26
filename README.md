@@ -1,6 +1,21 @@
 # Occasio
 
-A full-stack event planning platform built with Node.js, Express, TypeScript, Knex.js, and MySQL.
+A full-stack event planning platform built with Node.js, Express, TypeScript, Knex.js, MySQL, React, and Tailwind CSS.
+
+---
+
+## Screenshots
+
+Placeholders for application UI screenshots (save captured images into `docs/screenshots/`):
+
+![Events List](docs/screenshots/events-list.png)  
+*Events List Page — Displaying event grid, search/tag filter bar, and RSVP status badges.*
+
+![Create Event Form](docs/screenshots/create-event.png)  
+*Create Event Form — Interface for creating new public or private events with tag selection.*
+
+![Event Detail Page](docs/screenshots/event-detail.png)  
+*Event Detail Page — Detailed event information, creator actions, tag badges, and interactive RSVP controls.*
 
 ---
 
@@ -45,6 +60,7 @@ Every API endpoint adheres to uniform JSON response envelopes:
   ```
 
   *(The `meta` object is optional and omitted when pagination/filtering metadata is not present).*
+
 - **Error Responses**:
 
   ```json
@@ -66,6 +82,42 @@ Every API endpoint adheres to uniform JSON response envelopes:
 - Every route is documented with `@swagger` JSDoc annotations referencing shared schemas (`ErrorResponse`, `BearerAuth`).
 - Interactive Swagger UI documentation is automatically generated and served at `/api-docs`.
 
+### 7. Dual-Tier Rate Limiting
+
+- **Strict Auth Limiter**: Applied to sensitive authentication endpoints (`/auth/login`, `/auth/signup`, `/auth/refresh`) to prevent brute-force attacks.
+- **General API Limiter**: Applied globally to protect API endpoints against DDoS and excessive traffic abuse.
+- **Standard Envelope on 429**: Custom rate limit handlers format `429 Too Many Requests` responses using the standard JSON error envelope (`RATE_LIMIT_EXCEEDED`).
+
+### 8. Tags & Many-to-Many Architecture
+
+- **Normalized Storage**: Dedicated `tags` table and `event_tags` junction table with foreign key constraints and cascade deletions.
+- **Case-Insensitive Deduplication**: Tag names (e.g. `Tech`, `tech`, `TECH`) are automatically normalized and deduplicated upon creation.
+- **"Any Tag Matches" Filter**: Filtering events by tag on `GET /events?tags=...` uses disjunctive (OR) semantics — an event matching at least one requested tag is included in the result set.
+
+### 9. RSVP State & Ownership Model
+
+- **Unique Constraint**: Database constraint `(user_id, event_id)` enforces exactly one RSVP record per user per event.
+- **Upsert-in-Place**: Status transitions (`GOING`, `MAYBE`, `NOT_GOING`) utilize `ON DUPLICATE KEY UPDATE` to eliminate duplicate rows while keeping state updates atomic.
+- **Visibility-Gated**: RSVP endpoints verify event visibility first. Attempting to RSVP to a private event that the requesting user cannot access returns `404 Not Found` (`EVENT_NOT_FOUND`).
+
+### 10. Two-Tier Testing Strategy
+
+- **Unit Tests** (`npm run test:unit --workspace=backend`): Fast, isolated test suite using Vitest with mocked repository layers. Validates business logic, authorization rules, and edge cases in milliseconds without database setup.
+- **Integration Tests** (`npm run test:integration --workspace=backend`): Full HTTP flow tests using Supertest against a live MySQL test database. Verifies actual Knex SQL queries, schema constraints, middleware execution, and token rotation.
+- **Why Both?**: Unit tests deliver instant feedback during active development, while integration tests guarantee end-to-end system correctness across the HTTP transport and database layer.
+
+### 11. Request & Error Logging
+
+- **HTTP Access Logs**: Structured request logging via `morgan` middleware formatting status codes, response times, and HTTP verbs.
+- **Tiered Error Logging**: Client-side operational errors (4xx validation or auth errors) generate concise warning log entries, while full stack traces are logged exclusively for unexpected 5xx server errors to keep production logs clean and actionable.
+
+### 12. Frontend Component Architecture & Monochrome UI Design
+
+- **Feature-Based Modular Structure**: Code organized by domain feature inside `frontend/src/features/*` (`auth`, `events`) alongside reusable routing, state hooks, and API clients.
+- **Accessible UI Primitives (shadcn/ui & Base UI)**: Styled components (`frontend/src/components/ui/`) built on Base UI primitives and styled via Tailwind CSS.
+- **State Management**: TanStack Query (`react-query`) handles server state caching, background refetching, and optimistic updates for RSVPs, paired with Zustand for global auth session state.
+- **Strict Monochrome Design**: Built with Tailwind CSS adhering to a high-contrast monochrome aesthetic (black, white, zinc/neutral scale).
+
 ---
 
 ## Setup Instructions
@@ -74,14 +126,14 @@ Follow these steps for setting up and running the project locally (tested on Win
 
 ### 1. Configure Environment Variables
 
-Copy the example environment configuration to create your `.env` file:
+Copy the example environment configuration to create `.env` files for both backend and frontend:
 
 ```bash
-# Windows PowerShell
-Copy-Item .env.example .env
-
-# Bash / Zsh
+# Backend Environment
 cp .env.example .env
+
+# Frontend Environment
+cp frontend/.env.example frontend/.env
 ```
 
 Ensure database credentials, server port, and JWT secrets in `.env` match your local environment.
@@ -104,34 +156,46 @@ npm install
 
 ### 4. Run Database Migrations
 
-Execute Knex migrations to create database tables (`users`, `refresh_tokens`, `events`):
+Execute Knex migrations to create database tables (`users`, `refresh_tokens`, `events`, `tags`, `event_tags`, `event_rsvps`):
 
 ```bash
 npm run db:migrate --workspace=backend
 ```
 
-### 5. Start Backend Server
+### 5. Start Backend & Frontend Dev Servers
 
-Run the backend in development mode with live reloading:
+Both backend and frontend servers must be running simultaneously for the application to work properly:
 
+#### Terminal 1 — Backend API Server (Port 4000)
 ```bash
 npm run dev --workspace=backend
 ```
 
-### 6. Verify API & Documentation
+#### Terminal 2 — Frontend Dev Server (Port 5173)
+```bash
+npm run dev --workspace=frontend
+```
+
+### 6. Verify Application & API Documentation
 
 Open your browser and navigate to:
 
-- **Swagger Documentation**: [http://localhost:4000/api-docs](http://localhost:4000/api-docs)
-
-*(Note: Frontend workspace setup will be added here in an upcoming module).*
+- **Frontend Application**: [http://localhost:5173](http://localhost:5173)
+- **Backend API & Swagger Docs**: [http://localhost:4000/api-docs](http://localhost:4000/api-docs)
 
 ### 7. Run Test Suite
 
-Execute the integration test suite across all modules:
+Execute the integration and unit test suites across all modules:
 
 ```bash
+# Run all workspace tests
 npm test
+
+# Run backend unit tests only
+npm run test:unit --workspace=backend
+
+# Run backend integration tests only
+npm run test:integration --workspace=backend
 ```
 
 ---
@@ -139,4 +203,5 @@ npm test
 ## Assumptions
 
 - **Private Event Visibility**: Events with `event_type = 'private'` are strictly visible only to their creator. When queried by unauthenticated visitors or other users, private events are excluded from `GET /events` listings, and direct lookups via `GET /events/:id` return `404 Not Found` (`EVENT_NOT_FOUND`) rather than `403 Forbidden`. This avoids confirming or leaking the existence of private events to unauthorized parties.
-- *(Additional assumptions for tag filtering, pagination, and frontend interactions will be documented here as those modules are introduced).*
+- **Tag Filtering Semantics**: Tag filtering on `GET /events` uses "any tag matches" semantics — an event matching at least one requested tag is included, not requiring all requested tags to match.
+- **RSVP Visibility Constraints**: Users can only submit RSVPs for public events or private events they own. RSVP requests for non-existent or inaccessible private events return `404 Not Found`.
