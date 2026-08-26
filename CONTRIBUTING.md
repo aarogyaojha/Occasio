@@ -28,16 +28,14 @@ Please follow the step-by-step instructions in the [README.md](README.md#setup-i
 
 ## 3. Architecture & Coding Conventions
 
-All code contributions must strictly adhere to the guidelines documented in **[AGENTS.md](AGENTS.md)**, which serves as the single source of truth for architectural standards across the repository.
-
-Key points to remember:
+All code contributions must strictly adhere to the following repository architectural standards:
 
 - **Strict Layering**: Code flows through `routes -> controller -> service -> repository`. Never query the database directly from controllers or services — all database queries must reside in `*.repository.ts` files using Knex.js.
-- **No ORMs**: Do not introduce Prisma, TypeORM, Sequelize, or any other ORM.
-- **Validation**: All incoming requests must be validated using Zod schemas via the shared `validate()` middleware.
+- **No ORMs**: Knex.js query builder only. Do not introduce Prisma, TypeORM, Sequelize, or any other ORM.
+- **Validation**: Every route must validate incoming requests using Zod schemas via the shared `validate()` middleware.
+- **Standard Response Envelopes**: All responses must use standard JSON envelopes (`{ success: true, data, meta? }` via `sendResponse` for success; `{ error: { code, message, details? } }` via `AppError` and central error middleware for failures).
 - **Authentication**: Use `authenticate` for protected routes requiring a logged-in user, and `optionalAuth` for public routes whose data visibility varies with authentication (e.g. private events).
-- **Envelopes & Error Handling**: All responses must use standard JSON envelopes (`sendResponse` for success, central `AppError` and error middleware for failures).
-- **Documentation**: Provide JSDoc docstrings for all exported service and repository functions, and `@swagger` annotations for all routes.
+- **Documentation**: Provide JSDoc docstrings for all exported service and repository functions, and `@swagger` JSDoc documentation on every route.
 
 ---
 
