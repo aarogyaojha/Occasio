@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuthStore } from '../../auth/authStore';
 import type { Event } from '../../../api/events';
+import DeleteConfirmDialog from '@/components/DeleteConfirmDialog';
 
 interface EventCardProps {
   event: Event;
@@ -82,43 +83,27 @@ export const EventCard: React.FC<EventCardProps> = ({ event, onDelete, isDeletin
 
         {isOwner && (
           <div className="flex items-center space-x-2 shrink-0">
-            {!showConfirmDelete ? (
-              <>
-                <Link
-                  to={`/events/${event.id}/edit`}
-                  className="px-2.5 py-1 text-xs border border-zinc-700 text-zinc-300 hover:text-white hover:bg-zinc-800 rounded-sm transition-colors uppercase font-bold"
-                >
-                  Edit
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmDelete(true)}
-                  className="px-2.5 py-1 text-xs border border-zinc-700 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-sm transition-colors uppercase font-bold"
-                >
-                  Delete
-                </button>
-              </>
-            ) : (
-              <div className="flex items-center space-x-2 bg-zinc-950 border border-zinc-800 p-1.5 rounded-sm">
-                <span className="text-[11px] text-zinc-400 font-semibold px-1">Are you sure?</span>
-                <button
-                  type="button"
-                  onClick={handleDeleteConfirm}
-                  disabled={isDeleting}
-                  className="px-2 py-0.5 bg-zinc-100 text-zinc-950 hover:bg-zinc-300 font-bold rounded-sm uppercase text-[11px] transition-colors disabled:opacity-50"
-                >
-                  {isDeleting ? 'Deleting...' : 'Confirm'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmDelete(false)}
-                  disabled={isDeleting}
-                  className="px-2 py-0.5 border border-zinc-700 text-zinc-400 hover:text-zinc-200 rounded-sm uppercase text-[11px] transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            )}
+            <Link
+              to={`/events/${event.id}/edit`}
+              className="px-2.5 py-1 text-xs border border-zinc-700 text-zinc-300 hover:text-white hover:bg-zinc-800 rounded-sm transition-colors uppercase font-bold"
+            >
+              Edit
+            </Link>
+            <button
+              type="button"
+              onClick={() => setShowConfirmDelete(true)}
+              className="px-2.5 py-1 text-xs border border-zinc-700 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-sm transition-colors uppercase font-bold"
+            >
+              Delete
+            </button>
+
+            <DeleteConfirmDialog
+              open={showConfirmDelete}
+              onOpenChange={setShowConfirmDelete}
+              onConfirm={handleDeleteConfirm}
+              itemLabel={event.title}
+              isDeleting={isDeleting}
+            />
           </div>
         )}
       </footer>

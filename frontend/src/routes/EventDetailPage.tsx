@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useEvent, useDeleteEvent } from '../features/events/useEvents';
 import { useAuthStore } from '../features/auth/authStore';
+import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
 
 export const EventDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -74,10 +75,11 @@ export const EventDetailPage: React.FC = () => {
           ← Back to Events
         </Link>
         <span
-          className={`uppercase tracking-widest px-3 py-1 rounded-sm border font-semibold ${event.event_type === 'public'
-            ? 'border-zinc-700 bg-zinc-950 text-zinc-300'
-            : 'border-zinc-600 bg-zinc-800 text-zinc-100'
-            }`}
+          className={`uppercase tracking-widest px-3 py-1 rounded-sm border font-semibold ${
+            event.event_type === 'public'
+              ? 'border-zinc-700 bg-zinc-950 text-zinc-300'
+              : 'border-zinc-600 bg-zinc-800 text-zinc-100'
+          }`}
         >
           {event.event_type} Event
         </span>
@@ -132,43 +134,27 @@ export const EventDetailPage: React.FC = () => {
         {/* Actions for Owner */}
         {isOwner && (
           <footer className="pt-6 border-t border-zinc-800 flex items-center justify-end space-x-3">
-            {!showConfirmDelete ? (
-              <>
-                <Link
-                  to={`/events/${event.id}/edit`}
-                  className="px-4 py-2 border border-zinc-700 text-zinc-200 hover:text-white hover:bg-zinc-800 rounded-sm uppercase font-bold transition-colors text-xs"
-                >
-                  Edit Event
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmDelete(true)}
-                  className="px-4 py-2 border border-zinc-700 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-sm uppercase font-bold transition-colors text-xs"
-                >
-                  Delete Event
-                </button>
-              </>
-            ) : (
-              <div className="flex items-center space-x-3 bg-zinc-950 border border-zinc-800 p-2 rounded-sm">
-                <span className="text-zinc-300 font-semibold px-2">Confirm event deletion?</span>
-                <button
-                  type="button"
-                  onClick={handleDelete}
-                  disabled={deleteMutation.isPending}
-                  className="px-3 py-1.5 bg-zinc-100 text-zinc-950 hover:bg-zinc-300 font-bold uppercase rounded-sm transition-colors text-xs disabled:opacity-50"
-                >
-                  {deleteMutation.isPending ? 'Deleting...' : 'Yes, Delete'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmDelete(false)}
-                  disabled={deleteMutation.isPending}
-                  className="px-3 py-1.5 border border-zinc-700 text-zinc-400 hover:text-zinc-200 uppercase rounded-sm transition-colors text-xs"
-                >
-                  Cancel
-                </button>
-              </div>
-            )}
+            <Link
+              to={`/events/${event.id}/edit`}
+              className="px-4 py-2 border border-zinc-700 text-zinc-200 hover:text-white hover:bg-zinc-800 rounded-sm uppercase font-bold transition-colors text-xs"
+            >
+              Edit Event
+            </Link>
+            <button
+              type="button"
+              onClick={() => setShowConfirmDelete(true)}
+              className="px-4 py-2 border border-zinc-700 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-sm uppercase font-bold transition-colors text-xs"
+            >
+              Delete Event
+            </button>
+
+            <DeleteConfirmDialog
+              open={showConfirmDelete}
+              onOpenChange={setShowConfirmDelete}
+              onConfirm={handleDelete}
+              itemLabel={event.title}
+              isDeleting={deleteMutation.isPending}
+            />
           </footer>
         )}
       </article>
