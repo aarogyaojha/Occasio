@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { authRepository, User } from './auth.repository';
 import { SignupInput, LoginInput } from './auth.schema';
+import { sendVerificationEmail } from '../../utils/sendVerificationEmail';
 import { AppError } from '../../utils/AppError';
 import { env } from '../../config/env';
 import {
@@ -29,16 +30,16 @@ const generateRefreshToken = (): string => {
 
 export const authService = {
   /**
-   * Registers a new user, hashes their password, and creates an access and refresh token pair.
+   * Registers a new user with unverified email, generates verification token,
+   * logs and sends verification email, and returns user details without auth tokens.
    *
    * @param input - The signup input containing name, email, and password.
-   * @returns An object containing the created user (without password), access token, and raw refresh token.
+   * @returns An object containing the created user (without password) and a message.
    * @throws AppError 409 if the email is already registered.
    */
   async signup(input: SignupInput): Promise<{
     user: Omit<User, 'password_hash'>;
-    accessToken: string;
-    refreshToken: string;
+    message: string;
   }> {
     const existingUser = await authRepository.findUserByEmail(input.email);
     if (existingUser) {
@@ -56,31 +57,33 @@ export const authService = {
       password_hash: passwordHash,
     });
 
-    const accessToken = generateAccessToken(user.id);
-    const rawRefreshToken = generateRefreshToken();
-    const tokenHash = hashToken(rawRefreshToken);
-    const expiresAt = new Date(Date.now() + REFRESH_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+    const rawVerificationToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = hashToken(rawVerificationToken);
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-    await authRepository.storeRefreshToken({
+    await authRepository.createVerificationToken({
       user_id: user.id,
       token_hash: tokenHash,
       expires_at: expiresAt,
     });
 
+    const verificationLink = `${env.FRONTEND_URL}/verify-email?token=${rawVerificationToken}`;
+    await sendVerificationEmail(user.email, verificationLink);
+
     const { password_hash, ...userWithoutPassword } = user;
     return {
       user: userWithoutPassword,
-      accessToken,
-      refreshToken: rawRefreshToken,
+      message: 'Verification email sent — check your inbox.',
     };
   },
 
   /**
-   * Authenticates user credentials and creates a new access and refresh token pair.
+   * Authenticates user credentials. Blocks login if email is not verified.
    *
    * @param input - The login input containing email and password.
    * @returns An object containing user details, access token, and raw refresh token.
-   * @throws AppError 401 if the email or password is invalid.
+   * @throws AppError 401 if credentials are invalid.
+   * @throws AppError 403 if email is not verified.
    */
   async login(input: LoginInput): Promise<{
     user: Omit<User, 'password_hash'>;
@@ -105,6 +108,14 @@ export const authService = {
       );
     }
 
+    if (!Boolean(user.email_verified)) {
+      throw new AppError(
+        httpStatus.FORBIDDEN,
+        errorMessages[errorCodes.EMAIL_NOT_VERIFIED],
+        errorCodes.EMAIL_NOT_VERIFIED
+      );
+    }
+
     const accessToken = generateAccessToken(user.id);
     const rawRefreshToken = generateRefreshToken();
     const tokenHash = hashToken(rawRefreshToken);
@@ -122,6 +133,61 @@ export const authService = {
       accessToken,
       refreshToken: rawRefreshToken,
     };
+  },
+
+  /**
+   * Verifies a user's email using a raw verification token.
+   *
+   * @param rawToken - Raw verification token string from query param.
+   * @returns Success message object.
+   * @throws AppError 400 if token is invalid, expired, or already used.
+   */
+  async verifyEmail(rawToken: string): Promise<{ message: string }> {
+    const tokenHash = hashToken(rawToken);
+    const token = await authRepository.findVerificationTokenByHash(tokenHash);
+
+    if (!token || token.used_at !== null || new Date(token.expires_at) < new Date()) {
+      throw new AppError(
+        httpStatus.BAD_REQUEST,
+        errorMessages[errorCodes.EMAIL_VERIFICATION_INVALID],
+        errorCodes.EMAIL_VERIFICATION_INVALID
+      );
+    }
+
+    await authRepository.markUserEmailVerified(token.user_id);
+    await authRepository.markVerificationTokenUsed(token.id);
+
+    return { message: 'Email verified successfully' };
+  },
+
+  /**
+   * Resends email verification link to unverified users. Returns generic message regardless.
+   *
+   * @param email - Target email address.
+   * @returns Generic confirmation message.
+   */
+  async resendVerification(email: string): Promise<{ message: string }> {
+    const genericMessage = 'Verification email sent — check your inbox.';
+    const user = await authRepository.findUserByEmail(email);
+
+    if (user && !Boolean(user.email_verified)) {
+      await authRepository.invalidateUserVerificationTokens(user.id);
+
+      const rawToken = crypto.randomBytes(32).toString('hex');
+      const tokenHash = hashToken(rawToken);
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      await authRepository.createVerificationToken({
+        user_id: user.id,
+        token_hash: tokenHash,
+        expires_at: expiresAt,
+      });
+
+      const verificationLink = `${env.FRONTEND_URL}/verify-email?token=${rawToken}`;
+      await sendVerificationEmail(user.email, verificationLink);
+    }
+
+    return { message: genericMessage };
   },
 
   /**

@@ -5,6 +5,7 @@ export interface User {
   name: string;
   email: string;
   password_hash: string;
+  email_verified: boolean;
   created_at: Date;
 }
 
@@ -14,6 +15,14 @@ export interface RefreshToken {
   token_hash: string;
   expires_at: Date;
   revoked_at: Date | null;
+}
+
+export interface EmailVerificationToken {
+  id: number;
+  user_id: number;
+  token_hash: string;
+  expires_at: Date;
+  used_at: Date | null;
 }
 
 export const authRepository = {
@@ -82,5 +91,60 @@ export const authRepository = {
    */
   async revokeRefreshToken(id: number): Promise<void> {
     await db('refresh_tokens').where({ id }).update({ revoked_at: new Date() });
+  },
+
+  /**
+   * Stores a new email verification token in the database.
+   *
+   * @param data - Token record containing user_id, token_hash, and expires_at.
+   * @returns The created email verification token record.
+   */
+  async createVerificationToken(data: {
+    user_id: number;
+    token_hash: string;
+    expires_at: Date;
+  }): Promise<EmailVerificationToken> {
+    const [id] = await db('email_verification_tokens').insert(data);
+    const token = await db('email_verification_tokens').where({ id }).first();
+    return token!;
+  },
+
+  /**
+   * Finds an email verification token record by its hashed value.
+   *
+   * @param token_hash - SHA-256 hash of the verification token.
+   * @returns The verification token record if found, otherwise undefined.
+   */
+  async findVerificationTokenByHash(token_hash: string): Promise<EmailVerificationToken | undefined> {
+    return db('email_verification_tokens').where({ token_hash }).first();
+  },
+
+  /**
+   * Marks an email verification token as used by setting used_at to now.
+   *
+   * @param id - Primary key ID of the verification token record.
+   */
+  async markVerificationTokenUsed(id: number): Promise<void> {
+    await db('email_verification_tokens').where({ id }).update({ used_at: new Date() });
+  },
+
+  /**
+   * Marks a user's email as verified (email_verified = true).
+   *
+   * @param userId - Primary key ID of the user.
+   */
+  async markUserEmailVerified(userId: number): Promise<void> {
+    await db('users').where({ id: userId }).update({ email_verified: true });
+  },
+
+  /**
+   * Invalidates existing unused email verification tokens for a user.
+   *
+   * @param userId - Primary key ID of the user.
+   */
+  async invalidateUserVerificationTokens(userId: number): Promise<void> {
+    await db('email_verification_tokens')
+      .where({ user_id: userId, used_at: null })
+      .update({ used_at: new Date() });
   },
 };

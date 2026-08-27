@@ -12,4 +12,6 @@ export const errorMessages: Record<ErrorCode, string> = {
   [errorCodes.NOT_FOUND]: 'Resource not found',
   [errorCodes.INTERNAL_ERROR]: 'Internal server error',
   [errorCodes.RATE_LIMITED]: 'Too many requests, please try again later',
+  [errorCodes.EMAIL_NOT_VERIFIED]: 'Please verify your email before logging in',
+  [errorCodes.EMAIL_VERIFICATION_INVALID]: 'Invalid, expired, or already used email verification token',
 };

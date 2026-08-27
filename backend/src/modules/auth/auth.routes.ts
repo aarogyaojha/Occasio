@@ -3,7 +3,12 @@ import { authController } from './auth.controller';
 import { validate } from '../../middleware/validate.middleware';
 import { authLimiter } from '../../middleware/rateLimiter.middleware';
 import { authenticate } from '../../middleware/auth.middleware';
-import { signupSchema, loginSchema } from './auth.schema';
+import {
+  signupSchema,
+  loginSchema,
+  verifyEmailQuerySchema,
+  resendVerificationSchema,
+} from './auth.schema';
 import { asyncHandler } from '../../utils/asyncHandler';
 
 const router = Router();
@@ -12,7 +17,7 @@ const router = Router();
  * @swagger
  * /auth/signup:
  *   post:
- *     summary: Register a new user
+ *     summary: Register a new user (email verification required)
  *     tags:
  *       - Auth
  *     requestBody:
@@ -40,7 +45,7 @@ const router = Router();
  *                 example: password123
  *     responses:
  *       201:
- *         description: User registered successfully
+ *         description: User registered successfully (verification email sent)
  *         content:
  *           application/json:
  *             schema:
@@ -61,29 +66,21 @@ const router = Router();
  *                           type: string
  *                         email:
  *                           type: string
+ *                         email_verified:
+ *                           type: boolean
+ *                           example: false
  *                         created_at:
  *                           type: string
  *                           format: date-time
- *                     accessToken:
+ *                     message:
  *                       type: string
+ *                       example: Verification email sent — check your inbox.
  *       400:
  *         description: Validation error
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
  *       409:
  *         description: Email already registered
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
  *       429:
  *         description: Too many requests
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.post('/signup', authLimiter, validate(signupSchema), asyncHandler(authController.signup));
 
@@ -115,51 +112,73 @@ router.post('/signup', authLimiter, validate(signupSchema), asyncHandler(authCon
  *     responses:
  *       200:
  *         description: Successfully authenticated
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 data:
- *                   type: object
- *                   properties:
- *                     user:
- *                       type: object
- *                       properties:
- *                         id:
- *                           type: integer
- *                         name:
- *                           type: string
- *                         email:
- *                           type: string
- *                         created_at:
- *                           type: string
- *                           format: date-time
- *                     accessToken:
- *                       type: string
- *       400:
- *         description: Validation error
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
  *       401:
  *         description: Invalid email or password
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Email not verified (EMAIL_NOT_VERIFIED)
  *       429:
  *         description: Too many requests
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.post('/login', authLimiter, validate(loginSchema), asyncHandler(authController.login));
+
+/**
+ * @swagger
+ * /auth/verify-email:
+ *   get:
+ *     summary: Verify user email address via token
+ *     tags:
+ *       - Auth
+ *     parameters:
+ *       - in: query
+ *         name: token
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Email verification token
+ *     responses:
+ *       200:
+ *         description: Email verified successfully
+ *       400:
+ *         description: Invalid or expired verification token (EMAIL_VERIFICATION_INVALID)
+ */
+router.get(
+  '/verify-email',
+  validate(verifyEmailQuerySchema, 'query'),
+  asyncHandler(authController.verifyEmail)
+);
+
+/**
+ * @swagger
+ * /auth/resend-verification:
+ *   post:
+ *     summary: Resend email verification link
+ *     tags:
+ *       - Auth
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *                 example: jane@example.com
+ *     responses:
+ *       200:
+ *         description: Verification email request processed
+ *       429:
+ *         description: Too many requests
+ */
+router.post(
+  '/resend-verification',
+  authLimiter,
+  validate(resendVerificationSchema),
+  asyncHandler(authController.resendVerification)
+);
 
 /**
  * @swagger
@@ -168,41 +187,11 @@ router.post('/login', authLimiter, validate(loginSchema), asyncHandler(authContr
  *     summary: Refresh access token using refresh token cookie
  *     tags:
  *       - Auth
- *     parameters:
- *       - name: refresh_token
- *         in: cookie
- *         required: true
- *         schema:
- *           type: string
- *         description: Refresh token stored in HTTP-only cookie
  *     responses:
  *       200:
  *         description: Successfully refreshed token
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 data:
- *                   type: object
- *                   properties:
- *                     accessToken:
- *                       type: string
  *       401:
  *         description: Invalid or expired refresh token
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
- *       429:
- *         description: Too many requests
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.post('/refresh', authLimiter, asyncHandler(authController.refresh));
 
@@ -213,30 +202,9 @@ router.post('/refresh', authLimiter, asyncHandler(authController.refresh));
  *     summary: Log out user and revoke refresh token
  *     tags:
  *       - Auth
- *     parameters:
- *       - name: refresh_token
- *         in: cookie
- *         required: true
- *         schema:
- *           type: string
- *         description: Refresh token stored in HTTP-only cookie
  *     responses:
  *       200:
  *         description: Logged out successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 data:
- *                   type: object
- *                   properties:
- *                     message:
- *                       type: string
- *                       example: Logged out successfully
  */
 router.post('/logout', asyncHandler(authController.logout));
 
@@ -252,32 +220,8 @@ router.post('/logout', asyncHandler(authController.logout));
  *     responses:
  *       200:
  *         description: Current user profile fetched successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 data:
- *                   type: object
- *                   properties:
- *                     id:
- *                       type: integer
- *                     name:
- *                       type: string
- *                     email:
- *                       type: string
- *                     created_at:
- *                       type: string
- *                       format: date-time
  *       401:
  *         description: Unauthorized
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/ErrorResponse'
  */
 router.get('/me', authenticate, asyncHandler(authController.me));
 

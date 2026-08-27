@@ -10,6 +10,8 @@ export const errorCodes = {
   NOT_FOUND: 'NOT_FOUND',
   INTERNAL_ERROR: 'INTERNAL_ERROR',
   RATE_LIMITED: 'RATE_LIMITED',
+  EMAIL_NOT_VERIFIED: 'EMAIL_NOT_VERIFIED',
+  EMAIL_VERIFICATION_INVALID: 'EMAIL_VERIFICATION_INVALID',
 } as const;
 
 export type ErrorCode = typeof errorCodes[keyof typeof errorCodes];

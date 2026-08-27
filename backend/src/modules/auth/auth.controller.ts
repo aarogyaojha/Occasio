@@ -20,10 +20,9 @@ const REFRESH_COOKIE_OPTIONS: CookieOptions = {
 export const authController = {
   async signup(req: Request, res: Response): Promise<void> {
     const result = await authService.signup(req.body);
-    res.cookie(REFRESH_TOKEN_COOKIE_NAME, result.refreshToken, REFRESH_COOKIE_OPTIONS);
     sendResponse(res, httpStatus.CREATED, {
       user: result.user,
-      accessToken: result.accessToken,
+      message: result.message,
     });
   },
 
@@ -34,6 +33,17 @@ export const authController = {
       user: result.user,
       accessToken: result.accessToken,
     });
+  },
+
+  async verifyEmail(req: Request, res: Response): Promise<void> {
+    const token = req.query.token as string;
+    const result = await authService.verifyEmail(token);
+    sendResponse(res, httpStatus.OK, result);
+  },
+
+  async resendVerification(req: Request, res: Response): Promise<void> {
+    const result = await authService.resendVerification(req.body.email);
+    sendResponse(res, httpStatus.OK, result);
   },
 
   async refresh(req: Request, res: Response): Promise<void> {

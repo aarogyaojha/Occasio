@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import rateLimit, { MemoryStore } from 'express-rate-limit';
 import { AppError } from '../utils/AppError';
 import { httpStatus, errorCodes, errorMessages } from '../constants';
-import { isDevelopment } from '../config/env';
+import { isDevelopment, isTest } from '../config/env';
 
 const authStore = new MemoryStore();
 const generalStore = new MemoryStore();
@@ -27,7 +27,7 @@ const rateLimitHandler = (
 
 /**
  * Strict rate limiter for sensitive authentication endpoints (signup, login, refresh).
- * Limits requests to 5 per 15-minute window per IP in production, higher in development.
+ * Limits requests to 5 per 15-minute window per IP in production, higher in development/test.
  */
 export const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -59,7 +59,9 @@ export const generalLimiter = rateLimit({
     if (
       url.startsWith('/auth/signup') ||
       url.startsWith('/auth/login') ||
-      url.startsWith('/auth/refresh')
+      url.startsWith('/auth/refresh') ||
+      url.startsWith('/auth/verify-email') ||
+      url.startsWith('/auth/resend-verification')
     ) {
       return true;
     }

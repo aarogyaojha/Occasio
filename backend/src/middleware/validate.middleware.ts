@@ -3,9 +3,10 @@ import { ZodSchema } from 'zod';
 import { AppError } from '../utils/AppError';
 import { httpStatus, errorCodes, errorMessages } from '../constants';
 
-export const validate = (schema: ZodSchema) => {
+export const validate = (schema: ZodSchema, target: 'body' | 'query' | 'params' = 'body') => {
   return (req: Request, _res: Response, next: NextFunction) => {
-    const result = schema.safeParse(req.body);
+    const dataToValidate = req[target];
+    const result = schema.safeParse(dataToValidate);
     if (!result.success) {
       const details = result.error.issues.map((issue) => ({
         field: issue.path.join('.'),
@@ -18,7 +19,9 @@ export const validate = (schema: ZodSchema) => {
         details
       );
     }
-    req.body = result.data;
+    if (target === 'body') {
+      req.body = result.data;
+    }
     next();
   };
 };

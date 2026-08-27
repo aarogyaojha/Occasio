@@ -11,5 +11,16 @@ export const loginSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 });
 
+export const verifyEmailQuerySchema = z.object({
+  token: z.string().trim().min(1, 'Token is required'),
+});
+
+export const resendVerificationSchema = z.object({
+  email: z.string().trim().email('Invalid email address'),
+});
+
 export type SignupInput = z.infer<typeof signupSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
+export type VerifyEmailQueryInput = z.infer<typeof verifyEmailQuerySchema>;
+export type ResendVerificationInput = z.infer<typeof resendVerificationSchema>;
+
