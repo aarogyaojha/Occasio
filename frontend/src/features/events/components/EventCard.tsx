@@ -65,6 +65,20 @@ export const EventCard: React.FC<EventCardProps> = ({ event, onDelete, isDeletin
         </p>
       )}
 
+      {/* RSVP Counts Compact Display */}
+      <div className="flex items-center gap-2.5 text-[11px] text-zinc-400 font-mono">
+        <span className="text-zinc-500 uppercase font-semibold">RSVPs:</span>
+        <span className="px-1.5 py-0.5 bg-zinc-950 border border-zinc-800 rounded-sm">
+          YES <span className="text-zinc-200 font-bold">{event.rsvp_counts?.yes ?? 0}</span>
+        </span>
+        <span className="px-1.5 py-0.5 bg-zinc-950 border border-zinc-800 rounded-sm">
+          NO <span className="text-zinc-200 font-bold">{event.rsvp_counts?.no ?? 0}</span>
+        </span>
+        <span className="px-1.5 py-0.5 bg-zinc-950 border border-zinc-800 rounded-sm">
+          MAYBE <span className="text-zinc-200 font-bold">{event.rsvp_counts?.maybe ?? 0}</span>
+        </span>
+      </div>
+
       <footer className="pt-3 border-t border-zinc-800/80 flex items-center justify-between gap-4 text-xs">
         <div className="flex flex-wrap gap-1.5 items-center">
           {event.tags && event.tags.length > 0 ? (

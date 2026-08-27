@@ -1,7 +1,8 @@
 import type { Knex } from 'knex';
 import db from '../../db/knex';
-import { EventType, EventSortField, SortOrder } from '../../constants';
+import { EventType, EventSortField, SortOrder, RsvpStatus } from '../../constants';
 import { tagsRepository } from '../tags/tags.repository';
+import { rsvpsRepository, RsvpCounts } from '../rsvps/rsvps.repository';
 
 export interface Event {
   id: number;
@@ -14,6 +15,8 @@ export interface Event {
   created_at: Date;
   updated_at: Date;
   tags?: string[];
+  rsvp_counts?: RsvpCounts;
+  current_user_rsvp?: RsvpStatus | null;
 }
 
 export interface CreateEventDbInput {
@@ -158,9 +161,16 @@ export const eventsRepository = {
       return undefined;
     }
     const tags = await this.getTagsForEvent(event.id, trx);
+    const rsvp_counts = await rsvpsRepository.getCounts(event.id, trx);
+    const current_user_rsvp =
+      currentUserId !== undefined
+        ? await rsvpsRepository.getUserRsvp(event.id, currentUserId, trx)
+        : null;
     return {
       ...event,
       tags,
+      rsvp_counts,
+      current_user_rsvp,
     };
   },
 
@@ -264,9 +274,23 @@ export const eventsRepository = {
       }
     }
 
+    // Batch load rsvp counts and current user's rsvp status
+    const rsvpCountsByEventId =
+      eventIds.length > 0
+        ? await rsvpsRepository.getBatchCounts(eventIds)
+        : new Map<number, RsvpCounts>();
+
+    const userRsvpByEventId =
+      eventIds.length > 0 && filters.currentUserId !== undefined
+        ? await rsvpsRepository.getBatchUserRsvps(eventIds, filters.currentUserId)
+        : new Map<number, RsvpStatus>();
+
     const events: Event[] = eventRows.map((e) => ({
       ...e,
       tags: tagsByEventId.get(e.id) || [],
+      rsvp_counts: rsvpCountsByEventId.get(e.id) || { yes: 0, no: 0, maybe: 0 },
+      current_user_rsvp:
+        filters.currentUserId !== undefined ? userRsvpByEventId.get(e.id) || null : null,
     }));
 
     return {

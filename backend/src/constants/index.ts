@@ -4,4 +4,6 @@ export * from './errorMessages';
 export * from './messages';
 export * from './auth';
 export * from './events';
+export * from './rsvps';
 export * from './swagger';
+

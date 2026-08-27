@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useEvent, useDeleteEvent } from '../features/events/useEvents';
+import { useSetRsvp } from '../features/events/useRsvp';
 import { useAuthStore } from '../features/auth/authStore';
+import { Button } from '../components/ui/button';
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
 
 export const EventDetailPage: React.FC = () => {
@@ -11,6 +13,7 @@ export const EventDetailPage: React.FC = () => {
 
   const { data: event, isLoading, error } = useEvent(eventId);
   const deleteMutation = useDeleteEvent();
+  const rsvpMutation = useSetRsvp();
   const user = useAuthStore((state) => state.user);
 
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
@@ -106,6 +109,48 @@ export const EventDetailPage: React.FC = () => {
           </div>
         </header>
 
+        {/* RSVP Section */}
+        <div className="space-y-2 pt-2 border-t border-zinc-800/80">
+          <div className="flex items-center justify-between">
+            <h3 className="text-zinc-500 uppercase text-[11px] font-bold">RSVP Status</h3>
+            {!user && (
+              <span className="text-[11px] text-zinc-500">
+                <Link to="/login" className="text-zinc-300 underline hover:text-white">
+                  Log in
+                </Link>{' '}
+                to RSVP
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(['yes', 'no', 'maybe'] as const).map((statusOption) => {
+              const isSelected = event.current_user_rsvp === statusOption;
+              const count = event.rsvp_counts?.[statusOption] ?? 0;
+              return (
+                <Button
+                  key={statusOption}
+                  type="button"
+                  variant={isSelected ? 'default' : 'outline'}
+                  size="sm"
+                  disabled={!user || rsvpMutation.isPending}
+                  onClick={() => {
+                    if (user) {
+                      rsvpMutation.mutate({ eventId: event.id, status: statusOption });
+                    }
+                  }}
+                  className={`uppercase font-bold tracking-wider text-xs ${
+                    isSelected
+                      ? 'bg-zinc-100 text-zinc-950 hover:bg-zinc-200 border-zinc-100'
+                      : 'bg-zinc-950 text-zinc-300 border-zinc-800 hover:bg-zinc-800 hover:text-white'
+                  }`}
+                >
+                  {statusOption.toUpperCase()} ({count})
+                </Button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Tags */}
         {event.tags && event.tags.length > 0 && (
           <div className="space-y-2">
@@ -163,3 +208,4 @@ export const EventDetailPage: React.FC = () => {
 };
 
 export default EventDetailPage;
+

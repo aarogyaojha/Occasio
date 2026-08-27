@@ -4,8 +4,11 @@ import { authenticate, optionalAuth } from '../../middleware/auth.middleware';
 import { validate } from '../../middleware/validate.middleware';
 import { createEventSchema, updateEventSchema } from './events.schema';
 import { asyncHandler } from '../../utils/asyncHandler';
+import rsvpRoutes from '../rsvps/rsvps.routes';
 
 const router = Router();
+
+router.use('/:eventId/rsvp', rsvpRoutes);
 
 /**
  * @swagger
@@ -116,6 +119,23 @@ const router = Router();
  *                         items:
  *                           type: string
  *                         example: [tech, web]
+ *                       rsvp_counts:
+ *                         type: object
+ *                         properties:
+ *                           yes:
+ *                             type: integer
+ *                             example: 4
+ *                           no:
+ *                             type: integer
+ *                             example: 1
+ *                           maybe:
+ *                             type: integer
+ *                             example: 2
+ *                       current_user_rsvp:
+ *                         type: string
+ *                         nullable: true
+ *                         enum: [yes, no, maybe]
+ *                         example: yes
  *                 meta:
  *                   type: object
  *                   properties:
@@ -203,6 +223,23 @@ router.get('/', optionalAuth, asyncHandler(eventsController.list));
  *                           items:
  *                               type: string
  *                           example: [tech, conference]
+ *                         rsvp_counts:
+ *                           type: object
+ *                           properties:
+ *                             yes:
+ *                               type: integer
+ *                               example: 4
+ *                             no:
+ *                               type: integer
+ *                               example: 1
+ *                             maybe:
+ *                               type: integer
+ *                               example: 2
+ *                         current_user_rsvp:
+ *                           type: string
+ *                           nullable: true
+ *                           enum: [yes, no, maybe]
+ *                           example: yes
  *       404:
  *         description: Event not found
  *         content:

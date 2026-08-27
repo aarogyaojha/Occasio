@@ -25,10 +25,9 @@ describe('Events Service (Unit)', () => {
     id: 10,
     title: 'Tech Conference 2026',
     description: 'Annual dev conference',
-    date: new Date('2026-09-01T10:00:00Z'),
+    start_datetime: new Date('2026-09-01T10:00:00Z'),
     location: 'Tech Hall',
-    capacity: 100,
-    is_private: false,
+    event_type: 'public',
     creator_id: 1,
     created_at: new Date('2026-08-01'),
     updated_at: new Date('2026-08-01'),
@@ -36,21 +35,20 @@ describe('Events Service (Unit)', () => {
 
   describe('createEvent', () => {
     it('creates an event without tags when tags are not provided', async () => {
-      const { tags, ...eventFields } = {
+      const eventInput = {
         title: 'Tech Conference 2026',
         description: 'Annual dev conference',
-        date: new Date('2026-09-01T10:00:00Z'),
+        start_datetime: '2026-09-01T10:00:00Z',
         location: 'Tech Hall',
-        capacity: 100,
-        is_private: false,
+        event_type: 'public' as const,
       };
 
       vi.mocked(eventsRepository.create).mockResolvedValue(mockEvent);
 
-      const result = await eventsService.createEvent(1, eventFields);
+      const result = await eventsService.createEvent(1, eventInput);
 
       expect(eventsRepository.create).toHaveBeenCalledWith({
-        ...eventFields,
+        ...eventInput,
         creator_id: 1,
       });
       expect(eventsRepository.setEventTags).not.toHaveBeenCalled();
@@ -65,17 +63,13 @@ describe('Events Service (Unit)', () => {
       const input = {
         title: 'Tech Conference 2026',
         description: 'Annual dev conference',
-        date: new Date('2026-09-01T10:00:00Z'),
+        start_datetime: '2026-09-01T10:00:00Z',
         location: 'Tech Hall',
-        capacity: 100,
-        is_private: false,
-        tags: [1, 2],
+        event_type: 'public' as const,
+        tags: ['Tech', 'AI'],
       };
 
-      const mockTags = [
-        { id: 1, name: 'Tech', created_at: new Date() },
-        { id: 2, name: 'AI', created_at: new Date() },
-      ];
+      const mockTags = ['Tech', 'AI'];
 
       vi.mocked(eventsRepository.create).mockResolvedValue(mockEvent);
       vi.mocked(eventsRepository.setEventTags).mockResolvedValue();
@@ -86,13 +80,12 @@ describe('Events Service (Unit)', () => {
       expect(eventsRepository.create).toHaveBeenCalledWith({
         title: input.title,
         description: input.description,
-        date: input.date,
+        start_datetime: input.start_datetime,
         location: input.location,
-        capacity: input.capacity,
-        is_private: input.is_private,
+        event_type: input.event_type,
         creator_id: 1,
       });
-      expect(eventsRepository.setEventTags).toHaveBeenCalledWith(10, [1, 2]);
+      expect(eventsRepository.setEventTags).toHaveBeenCalledWith(10, ['Tech', 'AI']);
       expect(eventsRepository.getTagsForEvent).toHaveBeenCalledWith(10);
       expect(result).toEqual({
         ...mockEvent,
@@ -112,7 +105,7 @@ describe('Events Service (Unit)', () => {
     });
 
     it('throws EVENT_NOT_FOUND (404) for a non-existent event', async () => {
-      vi.mocked(eventsRepository.findById).mockResolvedValue(null);
+      vi.mocked(eventsRepository.findById).mockResolvedValue(undefined);
 
       await expect(eventsService.getEventById(999, 1)).rejects.toThrowError(AppError);
       try {
@@ -124,8 +117,7 @@ describe('Events Service (Unit)', () => {
     });
 
     it('throws EVENT_NOT_FOUND (404) for a private event hidden from the requesting user', async () => {
-      // Repository returns null when a private event is not visible to currentUserId
-      vi.mocked(eventsRepository.findById).mockResolvedValue(null);
+      vi.mocked(eventsRepository.findById).mockResolvedValue(undefined);
 
       await expect(eventsService.getEventById(10, 2)).rejects.toThrowError(AppError);
       try {
@@ -141,7 +133,7 @@ describe('Events Service (Unit)', () => {
     it('passes filter parameters through to the repository unchanged', async () => {
       const filters: EventFilters = {
         search: 'Tech',
-        tagId: 1,
+        tags: ['Tech'],
         page: 2,
         limit: 10,
         sortBy: 'date',
@@ -150,7 +142,7 @@ describe('Events Service (Unit)', () => {
       };
 
       const paginatedResult: PaginatedEvents = {
-        events: [mockEvent],
+        data: [mockEvent],
         meta: { page: 2, limit: 10, total: 1, totalPages: 1 },
       };
 
@@ -165,7 +157,7 @@ describe('Events Service (Unit)', () => {
 
   describe('updateEvent', () => {
     it('throws EVENT_NOT_FOUND (404) if event is missing', async () => {
-      vi.mocked(eventsRepository.findById).mockResolvedValue(null);
+      vi.mocked(eventsRepository.findById).mockResolvedValue(undefined);
 
       await expect(eventsService.updateEvent(1, 999, { title: 'New' })).rejects.toThrowError(
         AppError
@@ -198,23 +190,23 @@ describe('Events Service (Unit)', () => {
       const updatedEventRecord: Event = { ...mockEvent, title: 'Updated Title' };
 
       vi.mocked(eventsRepository.findById)
-        .mockResolvedValueOnce(ownedEvent) // First call to check ownership
-        .mockResolvedValueOnce(updatedEventRecord); // Second call to retrieve updated record
+        .mockResolvedValueOnce(ownedEvent)
+        .mockResolvedValueOnce(updatedEventRecord);
 
-      vi.mocked(eventsRepository.update).mockResolvedValue();
+      vi.mocked(eventsRepository.update).mockResolvedValue(updatedEventRecord);
       vi.mocked(eventsRepository.setEventTags).mockResolvedValue();
 
-      const result = await eventsService.updateEvent(1, 10, { title: 'Updated Title', tags: [3] });
+      const result = await eventsService.updateEvent(1, 10, { title: 'Updated Title', tags: ['Tag3'] });
 
       expect(eventsRepository.update).toHaveBeenCalledWith(10, { title: 'Updated Title' });
-      expect(eventsRepository.setEventTags).toHaveBeenCalledWith(10, [3]);
+      expect(eventsRepository.setEventTags).toHaveBeenCalledWith(10, ['Tag3']);
       expect(result).toEqual(updatedEventRecord);
     });
   });
 
   describe('deleteEvent', () => {
     it('throws EVENT_NOT_FOUND (404) if event is missing', async () => {
-      vi.mocked(eventsRepository.findById).mockResolvedValue(null);
+      vi.mocked(eventsRepository.findById).mockResolvedValue(undefined);
 
       await expect(eventsService.deleteEvent(1, 999)).rejects.toThrowError(AppError);
       try {

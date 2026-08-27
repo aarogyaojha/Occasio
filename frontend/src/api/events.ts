@@ -1,4 +1,5 @@
 import apiClient from './client';
+import type { RsvpCounts, RsvpStatus } from './rsvps';
 
 export interface Event {
   id: number;
@@ -11,6 +12,8 @@ export interface Event {
   created_at: string;
   updated_at: string;
   tags: string[];
+  rsvp_counts?: RsvpCounts;
+  current_user_rsvp?: RsvpStatus | null;
 }
 
 export interface EventFilters {
