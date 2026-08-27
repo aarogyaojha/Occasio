@@ -86,7 +86,7 @@ Every API endpoint adheres to uniform JSON response envelopes:
 
 - **Strict Auth Limiter**: Applied to sensitive authentication endpoints (`/auth/login`, `/auth/signup`, `/auth/refresh`) to prevent brute-force attacks.
 - **General API Limiter**: Applied globally to protect API endpoints against DDoS and excessive traffic abuse.
-- **Standard Envelope on 429**: Custom rate limit handlers format `429 Too Many Requests` responses using the standard JSON error envelope (`RATE_LIMIT_EXCEEDED`).
+- **Standard Envelope on 429**: Custom rate limit handlers format `429 Too Many Requests` responses using the standard JSON error envelope (`RATE_LIMITED`).
 
 ### 8. Tags & Many-to-Many Architecture
 
@@ -97,7 +97,7 @@ Every API endpoint adheres to uniform JSON response envelopes:
 ### 9. RSVP State & Ownership Model
 
 - **Unique Constraint**: Database constraint `(user_id, event_id)` enforces exactly one RSVP record per user per event.
-- **Upsert-in-Place**: Status transitions (`GOING`, `MAYBE`, `NOT_GOING`) utilize `ON DUPLICATE KEY UPDATE` to eliminate duplicate rows while keeping state updates atomic.
+- **Upsert-in-Place**: Status transitions (`yes`, `maybe`, `no`) utilize `ON DUPLICATE KEY UPDATE` to eliminate duplicate rows while keeping state updates atomic.
 - **Visibility-Gated**: RSVP endpoints verify event visibility first. Attempting to RSVP to a private event that the requesting user cannot access returns `404 Not Found` (`EVENT_NOT_FOUND`).
 
 ### 10. Two-Tier Testing Strategy
