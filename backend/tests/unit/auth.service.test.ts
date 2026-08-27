@@ -1,10 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { authService } from '../../src/modules/auth/auth.service';
-import { authRepository, User, RefreshToken } from '../../src/modules/auth/auth.repository';
+import { authRepository, User, RefreshToken, EmailVerificationToken } from '../../src/modules/auth/auth.repository';
+import { sendVerificationEmail } from '../../src/utils/sendVerificationEmail';
 import { AppError } from '../../src/utils/AppError';
 import { httpStatus, errorCodes, ACCESS_TOKEN_EXPIRY } from '../../src/constants';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+
+vi.mock('../../src/utils/sendVerificationEmail', () => ({
+  sendVerificationEmail: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock('../../src/modules/auth/auth.repository', () => ({
   authRepository: {
@@ -14,6 +19,11 @@ vi.mock('../../src/modules/auth/auth.repository', () => ({
     storeRefreshToken: vi.fn(),
     findRefreshTokenByHash: vi.fn(),
     revokeRefreshToken: vi.fn(),
+    createVerificationToken: vi.fn(),
+    findVerificationTokenByHash: vi.fn(),
+    markVerificationTokenUsed: vi.fn(),
+    markUserEmailVerified: vi.fn(),
+    invalidateUserVerificationTokens: vi.fn(),
   },
 }));
 
@@ -40,7 +50,13 @@ describe('Auth Service (Unit)', () => {
     name: 'Alice Smith',
     email: 'alice@example.com',
     password_hash: 'hashed_password_abc123',
+    email_verified: false,
     created_at: new Date('2026-08-01'),
+  };
+
+  const mockVerifiedUser: User = {
+    ...mockUser,
+    email_verified: true,
   };
 
   const mockRefreshToken: RefreshToken = {
@@ -51,8 +67,16 @@ describe('Auth Service (Unit)', () => {
     revoked_at: null,
   };
 
+  const mockVerificationToken: EmailVerificationToken = {
+    id: 10,
+    user_id: 1,
+    token_hash: 'hashed_verification_token',
+    expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    used_at: null,
+  };
+
   describe('signup', () => {
-    it('throws AUTH_EMAIL_TAKEN (400) when email is already registered', async () => {
+    it('throws AUTH_EMAIL_TAKEN (409) when email is already registered', async () => {
       vi.mocked(authRepository.findUserByEmail).mockResolvedValue(mockUser);
 
       await expect(
@@ -68,12 +92,11 @@ describe('Auth Service (Unit)', () => {
       expect(authRepository.createUser).not.toHaveBeenCalled();
     });
 
-    it('hashes password and creates user when email is available', async () => {
+    it('hashes password, creates user, creates verification token, sends email, and returns user without tokens', async () => {
       vi.mocked(authRepository.findUserByEmail).mockResolvedValue(undefined);
       vi.mocked(bcrypt.hash).mockResolvedValue('hashed_pwd_xyz' as never);
       vi.mocked(authRepository.createUser).mockResolvedValue(mockUser);
-      vi.mocked(jwt.sign).mockReturnValue('mock_access_token' as any);
-      vi.mocked(authRepository.storeRefreshToken).mockResolvedValue(mockRefreshToken);
+      vi.mocked(authRepository.createVerificationToken).mockResolvedValue(mockVerificationToken);
 
       const result = await authService.signup({
         name: 'Alice Smith',
@@ -88,10 +111,17 @@ describe('Auth Service (Unit)', () => {
         email: 'alice@example.com',
         password_hash: 'hashed_pwd_xyz',
       });
-      expect(authRepository.storeRefreshToken).toHaveBeenCalledTimes(1);
+      expect(authRepository.createVerificationToken).toHaveBeenCalledWith({
+        user_id: mockUser.id,
+        token_hash: expect.any(String),
+        expires_at: expect.any(Date),
+      });
+      expect(sendVerificationEmail).toHaveBeenCalledWith('alice@example.com', expect.stringContaining('/verify-email?token='));
       expect(result.user).not.toHaveProperty('password_hash');
-      expect(result.accessToken).toBe('mock_access_token');
-      expect(typeof result.refreshToken).toBe('string');
+      expect(result.user.email_verified).toBe(false);
+      expect(result).toHaveProperty('message');
+      expect(result).not.toHaveProperty('accessToken');
+      expect(result).not.toHaveProperty('refreshToken');
     });
   });
 
@@ -124,8 +154,25 @@ describe('Auth Service (Unit)', () => {
       expect(bcrypt.compare).toHaveBeenCalledWith('WrongPassword', mockUser.password_hash);
     });
 
-    it('authenticates user and returns tokens on valid credentials', async () => {
+    it('throws EMAIL_NOT_VERIFIED (403) when user email is not verified', async () => {
       vi.mocked(authRepository.findUserByEmail).mockResolvedValue(mockUser);
+      vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+
+      await expect(
+        authService.login({
+          email: 'alice@example.com',
+          password: 'Password123!',
+        })
+      ).rejects.toThrowError(
+        expect.objectContaining({
+          statusCode: httpStatus.FORBIDDEN,
+          code: errorCodes.EMAIL_NOT_VERIFIED,
+        })
+      );
+    });
+
+    it('authenticates user and returns tokens when email is verified and credentials valid', async () => {
+      vi.mocked(authRepository.findUserByEmail).mockResolvedValue(mockVerifiedUser);
       vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
       vi.mocked(jwt.sign).mockReturnValue('login_access_token' as any);
       vi.mocked(authRepository.storeRefreshToken).mockResolvedValue(mockRefreshToken);
@@ -135,15 +182,109 @@ describe('Auth Service (Unit)', () => {
         password: 'Password123!',
       });
 
-      expect(bcrypt.compare).toHaveBeenCalledWith('Password123!', mockUser.password_hash);
+      expect(bcrypt.compare).toHaveBeenCalledWith('Password123!', mockVerifiedUser.password_hash);
       expect(jwt.sign).toHaveBeenCalledWith(
-        { userId: mockUser.id },
+        { userId: mockVerifiedUser.id },
         expect.any(String),
         { expiresIn: ACCESS_TOKEN_EXPIRY }
       );
       expect(authRepository.storeRefreshToken).toHaveBeenCalledTimes(1);
       expect(result.user).not.toHaveProperty('password_hash');
       expect(result.accessToken).toBe('login_access_token');
+    });
+  });
+
+  describe('verifyEmail', () => {
+    it('marks user email verified and token as used when valid token is provided', async () => {
+      vi.mocked(authRepository.findVerificationTokenByHash).mockResolvedValue(mockVerificationToken);
+      vi.mocked(authRepository.markUserEmailVerified).mockResolvedValue();
+      vi.mocked(authRepository.markVerificationTokenUsed).mockResolvedValue();
+
+      const result = await authService.verifyEmail('valid_raw_token');
+
+      expect(authRepository.markUserEmailVerified).toHaveBeenCalledWith(mockVerificationToken.user_id);
+      expect(authRepository.markVerificationTokenUsed).toHaveBeenCalledWith(mockVerificationToken.id);
+      expect(result.message).toBe('Email verified successfully');
+    });
+
+    it('throws EMAIL_VERIFICATION_INVALID (400) if token is not found', async () => {
+      vi.mocked(authRepository.findVerificationTokenByHash).mockResolvedValue(undefined);
+
+      await expect(authService.verifyEmail('nonexistent_token')).rejects.toThrowError(
+        expect.objectContaining({
+          statusCode: httpStatus.BAD_REQUEST,
+          code: errorCodes.EMAIL_VERIFICATION_INVALID,
+        })
+      );
+    });
+
+    it('throws EMAIL_VERIFICATION_INVALID (400) if token is already used', async () => {
+      const usedToken: EmailVerificationToken = {
+        ...mockVerificationToken,
+        used_at: new Date(),
+      };
+      vi.mocked(authRepository.findVerificationTokenByHash).mockResolvedValue(usedToken);
+
+      await expect(authService.verifyEmail('already_used_token')).rejects.toThrowError(
+        expect.objectContaining({
+          statusCode: httpStatus.BAD_REQUEST,
+          code: errorCodes.EMAIL_VERIFICATION_INVALID,
+        })
+      );
+    });
+
+    it('throws EMAIL_VERIFICATION_INVALID (400) if token is expired', async () => {
+      const expiredToken: EmailVerificationToken = {
+        ...mockVerificationToken,
+        expires_at: new Date(Date.now() - 1000),
+      };
+      vi.mocked(authRepository.findVerificationTokenByHash).mockResolvedValue(expiredToken);
+
+      await expect(authService.verifyEmail('expired_token')).rejects.toThrowError(
+        expect.objectContaining({
+          statusCode: httpStatus.BAD_REQUEST,
+          code: errorCodes.EMAIL_VERIFICATION_INVALID,
+        })
+      );
+    });
+  });
+
+  describe('resendVerification', () => {
+    it('invalidates existing tokens and sends new token if user exists and is unverified', async () => {
+      vi.mocked(authRepository.findUserByEmail).mockResolvedValue(mockUser);
+      vi.mocked(authRepository.invalidateUserVerificationTokens).mockResolvedValue();
+      vi.mocked(authRepository.createVerificationToken).mockResolvedValue(mockVerificationToken);
+
+      const result = await authService.resendVerification('alice@example.com');
+
+      expect(authRepository.invalidateUserVerificationTokens).toHaveBeenCalledWith(mockUser.id);
+      expect(authRepository.createVerificationToken).toHaveBeenCalledWith({
+        user_id: mockUser.id,
+        token_hash: expect.any(String),
+        expires_at: expect.any(Date),
+      });
+      expect(sendVerificationEmail).toHaveBeenCalledWith('alice@example.com', expect.stringContaining('/verify-email?token='));
+      expect(result.message).toContain('Verification email sent');
+    });
+
+    it('returns generic message without sending email if user is already verified', async () => {
+      vi.mocked(authRepository.findUserByEmail).mockResolvedValue(mockVerifiedUser);
+
+      const result = await authService.resendVerification('alice@example.com');
+
+      expect(authRepository.invalidateUserVerificationTokens).not.toHaveBeenCalled();
+      expect(sendVerificationEmail).not.toHaveBeenCalled();
+      expect(result.message).toContain('Verification email sent');
+    });
+
+    it('returns generic message without sending email if user does not exist', async () => {
+      vi.mocked(authRepository.findUserByEmail).mockResolvedValue(undefined);
+
+      const result = await authService.resendVerification('unknown@example.com');
+
+      expect(authRepository.invalidateUserVerificationTokens).not.toHaveBeenCalled();
+      expect(sendVerificationEmail).not.toHaveBeenCalled();
+      expect(result.message).toContain('Verification email sent');
     });
   });
 
@@ -254,6 +395,7 @@ describe('Auth Service (Unit)', () => {
         id: 1,
         name: 'Alice Smith',
         email: 'alice@example.com',
+        email_verified: false,
         created_at: mockUser.created_at,
       });
     });

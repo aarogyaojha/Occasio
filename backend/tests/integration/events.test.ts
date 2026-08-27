@@ -1,9 +1,19 @@
-import { describe, it, expect, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import app from '../../src/app';
 import db from '../../src/db/knex';
 import { resetRateLimiters } from '../../src/middleware/rateLimiter.middleware';
 import { httpStatus, errorCodes } from '../../src/constants';
+
+vi.mock('../../src/utils/sendVerificationEmail', () => ({
+  sendVerificationEmail: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('../../src/config/mailer', () => ({
+  transporter: {
+    sendMail: vi.fn().mockResolvedValue({}),
+  },
+}));
 
 describe('Events Module Integration Tests', () => {
   let user1Token: string;
@@ -11,36 +21,52 @@ describe('Events Module Integration Tests', () => {
   let user2Token: string;
   let user2Id: number;
 
+  async function createVerifiedUser(name: string, email: string, password = 'password123') {
+    const existing = await db('users').where({ email }).first();
+    if (existing) {
+      await db('event_rsvps').where({ user_id: existing.id }).del();
+      const userEvents = await db('events').where({ creator_id: existing.id }).select('id');
+      const eventIds = userEvents.map((e) => e.id);
+      if (eventIds.length > 0) {
+        await db('event_rsvps').whereIn('event_id', eventIds).del();
+        await db('event_tags').whereIn('event_id', eventIds).del();
+        await db('events').whereIn('id', eventIds).del();
+      }
+      await db('email_verification_tokens').where({ user_id: existing.id }).del();
+      await db('refresh_tokens').where({ user_id: existing.id }).del();
+      await db('users').where({ id: existing.id }).del();
+    }
+    const signupRes = await request(app)
+      .post('/auth/signup')
+      .send({ name, email, password });
+    const userId = signupRes.body.data.user.id;
+    await db('users').where({ id: userId }).update({ email_verified: true });
+    const loginRes = await request(app)
+      .post('/auth/login')
+      .send({ email, password });
+    return { id: userId, token: loginRes.body.data.accessToken as string };
+  }
+
   beforeEach(async () => {
     // Reset rate limiters and clear tables before each test
     resetRateLimiters();
+    await db('event_rsvps').del();
     await db('event_tags').del();
     await db('tags').del();
     await db('events').del();
+    await db('email_verification_tokens').del();
     await db('refresh_tokens').del();
     await db('users').del();
 
     // Register User 1 (Creator)
-    const user1Res = await request(app)
-      .post('/auth/signup')
-      .send({
-        name: 'Alice Creator',
-        email: 'alice@example.com',
-        password: 'password123',
-      });
-    user1Token = user1Res.body.data.accessToken;
-    user1Id = user1Res.body.data.user.id;
+    const user1 = await createVerifiedUser('Alice Creator', 'alice@example.com');
+    user1Id = user1.id;
+    user1Token = user1.token;
 
     // Register User 2 (Other User)
-    const user2Res = await request(app)
-      .post('/auth/signup')
-      .send({
-        name: 'Bob Other',
-        email: 'bob@example.com',
-        password: 'password123',
-      });
-    user2Token = user2Res.body.data.accessToken;
-    user2Id = user2Res.body.data.user.id;
+    const user2 = await createVerifiedUser('Bob Other', 'bob@example.com');
+    user2Id = user2.id;
+    user2Token = user2.token;
   });
 
   afterAll(async () => {
