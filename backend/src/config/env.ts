@@ -16,6 +16,9 @@ const envSchema = z.object({
   MYSQL_DATABASE: z.string().default('event_planner'),
   JWT_ACCESS_SECRET: z.string().min(1, 'JWT_ACCESS_SECRET is required'),
   JWT_REFRESH_SECRET: z.string().min(1, 'JWT_REFRESH_SECRET is required'),
+  GMAIL_USER: z.string().default('user@gmail.com'),
+  GMAIL_APP_PASSWORD: z.string().default('app_password'),
+  FRONTEND_URL: z.string().default('http://localhost:5173'),
 });
 
 const parsed = envSchema.safeParse(process.env);
