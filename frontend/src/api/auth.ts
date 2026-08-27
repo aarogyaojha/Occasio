@@ -2,6 +2,11 @@ import apiClient from './client';
 import type { SignupInput, LoginInput } from '../features/auth/schemas';
 import type { User } from '../features/auth/authStore';
 
+export interface SignupResponseData {
+  user: User;
+  message: string;
+}
+
 export interface AuthResponseData {
   user: User;
   accessToken: string;
@@ -32,11 +37,11 @@ const handleApiError = (error: unknown): never => {
 };
 
 /**
- * Registers a new user.
+ * Registers a new user (email verification required).
  */
-export const signup = async (data: SignupInput): Promise<AuthResponseData> => {
+export const signup = async (data: SignupInput): Promise<SignupResponseData> => {
   try {
-    const response = await apiClient.post<{ success: boolean; data: AuthResponseData }>(
+    const response = await apiClient.post<{ success: boolean; data: SignupResponseData }>(
       '/auth/signup',
       data
     );
@@ -54,6 +59,35 @@ export const login = async (data: LoginInput): Promise<AuthResponseData> => {
     const response = await apiClient.post<{ success: boolean; data: AuthResponseData }>(
       '/auth/login',
       data
+    );
+    return response.data.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+/**
+ * Verifies user email with verification token.
+ */
+export const verifyEmail = async (token: string): Promise<MessageResponseData> => {
+  try {
+    const response = await apiClient.get<{ success: boolean; data: MessageResponseData }>(
+      `/auth/verify-email?token=${encodeURIComponent(token)}`
+    );
+    return response.data.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+/**
+ * Resends email verification link to user email address.
+ */
+export const resendVerification = async (email: string): Promise<MessageResponseData> => {
+  try {
+    const response = await apiClient.post<{ success: boolean; data: MessageResponseData }>(
+      '/auth/resend-verification',
+      { email }
     );
     return response.data.data;
   } catch (error) {

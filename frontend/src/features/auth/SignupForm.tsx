@@ -20,7 +20,7 @@ export const SignupForm: React.FC = () => {
   const onSubmit = async (data: SignupInput) => {
     try {
       await signupMutation.mutateAsync(data);
-      navigate('/events', { replace: true });
+      navigate('/check-email', { replace: true, state: { email: data.email } });
     } catch {
       // Error handled via signupMutation.error
     }

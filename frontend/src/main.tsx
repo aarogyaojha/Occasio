@@ -6,6 +6,8 @@ import App from './App';
 import { AuthInitializer } from './features/auth/AuthInitializer';
 import { LoginPage } from './routes/LoginPage';
 import { SignupPage } from './routes/SignupPage';
+import { CheckEmailPage } from './routes/CheckEmailPage';
+import { VerifyEmailPage } from './routes/VerifyEmailPage';
 import { ProtectedRoute } from './routes/ProtectedRoute';
 import { EventsListPage } from './routes/EventsListPage';
 import { EventDetailPage } from './routes/EventDetailPage';
@@ -33,6 +35,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
               <Route index element={<Navigate to="/events" replace />} />
               <Route path="login" element={<LoginPage />} />
               <Route path="signup" element={<SignupPage />} />
+              <Route path="check-email" element={<CheckEmailPage />} />
+              <Route path="verify-email" element={<VerifyEmailPage />} />
               <Route element={<ProtectedRoute />}>
                 <Route path="events" element={<EventsListPage />} />
                 <Route path="events/new" element={<CreateEventPage />} />

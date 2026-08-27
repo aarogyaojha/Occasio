@@ -7,11 +7,12 @@ import { useAuth } from './useAuth';
 
 export const LoginForm: React.FC = () => {
   const navigate = useNavigate();
-  const { loginMutation } = useAuth();
+  const { loginMutation, resendVerificationMutation } = useAuth();
 
   const {
     register,
     handleSubmit,
+    getValues,
     formState: { errors },
   } = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
@@ -26,6 +27,17 @@ export const LoginForm: React.FC = () => {
     }
   };
 
+  const handleResend = async () => {
+    const email = getValues('email');
+    if (!email) return;
+    try {
+      await resendVerificationMutation.mutateAsync(email);
+    } catch {
+      // Error handled via resendVerificationMutation.error
+    }
+  };
+
+  const isEmailNotVerified = loginMutation.error?.code === 'EMAIL_NOT_VERIFIED';
   const errorMessage = loginMutation.error?.message;
 
   return (
@@ -40,8 +52,26 @@ export const LoginForm: React.FC = () => {
       </header>
 
       {errorMessage && (
+        <div className="p-3 bg-zinc-950 border border-zinc-700 text-zinc-200 text-xs font-mono rounded-sm space-y-2">
+          <div>[ERROR] {errorMessage}</div>
+          {isEmailNotVerified && (
+            <button
+              type="button"
+              onClick={handleResend}
+              disabled={resendVerificationMutation.isPending}
+              className="mt-1 text-xs text-zinc-100 underline hover:text-zinc-300 font-mono font-bold block"
+            >
+              {resendVerificationMutation.isPending
+                ? 'Sending verification link...'
+                : 'Resend verification email'}
+            </button>
+          )}
+        </div>
+      )}
+
+      {resendVerificationMutation.isSuccess && (
         <div className="p-3 bg-zinc-950 border border-zinc-700 text-zinc-200 text-xs font-mono rounded-sm">
-          [ERROR] {errorMessage}
+          [SUCCESS] {resendVerificationMutation.data.message}
         </div>
       )}
 
