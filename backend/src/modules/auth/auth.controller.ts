@@ -28,6 +28,40 @@ export const authController = {
 
   async login(req: Request, res: Response): Promise<void> {
     const result = await authService.login(req.body);
+    if (result.requiresTwoFactor) {
+      sendResponse(res, httpStatus.OK, {
+        requiresTwoFactor: true,
+        challengeToken: result.challengeToken,
+      });
+      return;
+    }
+    res.cookie(REFRESH_TOKEN_COOKIE_NAME, result.refreshToken, REFRESH_COOKIE_OPTIONS);
+    sendResponse(res, httpStatus.OK, {
+      user: result.user,
+      accessToken: result.accessToken,
+    });
+  },
+
+  async setupTwoFactor(req: Request, res: Response): Promise<void> {
+    const result = await authService.setupTwoFactor(req.user!.id);
+    sendResponse(res, httpStatus.OK, result);
+  },
+
+  async enableTwoFactor(req: Request, res: Response): Promise<void> {
+    const result = await authService.enableTwoFactor(req.user!.id, req.body.code);
+    sendResponse(res, httpStatus.OK, result);
+  },
+
+  async disableTwoFactor(req: Request, res: Response): Promise<void> {
+    const result = await authService.disableTwoFactor(req.user!.id, req.body.code);
+    sendResponse(res, httpStatus.OK, result);
+  },
+
+  async verifyTwoFactorLogin(req: Request, res: Response): Promise<void> {
+    const result = await authService.verifyTwoFactorLogin(
+      req.body.challengeToken,
+      req.body.code
+    );
     res.cookie(REFRESH_TOKEN_COOKIE_NAME, result.refreshToken, REFRESH_COOKIE_OPTIONS);
     sendResponse(res, httpStatus.OK, {
       user: result.user,

@@ -8,6 +8,9 @@ import {
   loginSchema,
   verifyEmailQuerySchema,
   resendVerificationSchema,
+  enableTwoFactorSchema,
+  disableTwoFactorSchema,
+  verifyTwoFactorLoginSchema,
 } from './auth.schema';
 import { asyncHandler } from '../../utils/asyncHandler';
 
@@ -224,5 +227,139 @@ router.post('/logout', asyncHandler(authController.logout));
  *         description: Unauthorized
  */
 router.get('/me', authenticate, asyncHandler(authController.me));
+
+/**
+ * @swagger
+ * /auth/2fa/setup:
+ *   post:
+ *     summary: Initiate setup for TOTP-based two-factor authentication, compatible with any standard authenticator app
+ *     tags:
+ *       - Auth
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Generated secret and QR code data URL
+ *       401:
+ *         description: Unauthorized
+ *       429:
+ *         description: Too many requests
+ */
+router.post('/2fa/setup', authenticate, authLimiter, asyncHandler(authController.setupTwoFactor));
+
+/**
+ * @swagger
+ * /auth/2fa/enable:
+ *   post:
+ *     summary: Verify TOTP code and enable TOTP-based two-factor authentication, compatible with any standard authenticator app
+ *     tags:
+ *       - Auth
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - code
+ *             properties:
+ *               code:
+ *                 type: string
+ *                 example: "123456"
+ *     responses:
+ *       200:
+ *         description: 2FA enabled successfully
+ *       400:
+ *         description: Invalid verification code (MFA_CODE_INVALID)
+ *       401:
+ *         description: Unauthorized
+ *       429:
+ *         description: Too many requests
+ */
+router.post(
+  '/2fa/enable',
+  authenticate,
+  authLimiter,
+  validate(enableTwoFactorSchema),
+  asyncHandler(authController.enableTwoFactor)
+);
+
+/**
+ * @swagger
+ * /auth/2fa/disable:
+ *   post:
+ *     summary: Disable TOTP-based two-factor authentication with valid TOTP code
+ *     tags:
+ *       - Auth
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - code
+ *             properties:
+ *               code:
+ *                 type: string
+ *                 example: "123456"
+ *     responses:
+ *       200:
+ *         description: 2FA disabled successfully
+ *       400:
+ *         description: Invalid verification code (MFA_CODE_INVALID)
+ *       401:
+ *         description: Unauthorized
+ *       429:
+ *         description: Too many requests
+ */
+router.post(
+  '/2fa/disable',
+  authenticate,
+  authLimiter,
+  validate(disableTwoFactorSchema),
+  asyncHandler(authController.disableTwoFactor)
+);
+
+/**
+ * @swagger
+ * /auth/2fa/verify-login:
+ *   post:
+ *     summary: Verify 2FA challenge token and TOTP code to complete login
+ *     tags:
+ *       - Auth
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - challengeToken
+ *               - code
+ *             properties:
+ *               challengeToken:
+ *                 type: string
+ *               code:
+ *                 type: string
+ *                 example: "123456"
+ *     responses:
+ *       200:
+ *         description: Successfully authenticated with 2FA
+ *       401:
+ *         description: Invalid verification code or challenge token
+ *       429:
+ *         description: Too many requests
+ */
+router.post(
+  '/2fa/verify-login',
+  authLimiter,
+  validate(verifyTwoFactorLoginSchema),
+  asyncHandler(authController.verifyTwoFactorLogin)
+);
 
 export default router;

@@ -12,6 +12,8 @@ export const errorCodes = {
   RATE_LIMITED: 'RATE_LIMITED',
   EMAIL_NOT_VERIFIED: 'EMAIL_NOT_VERIFIED',
   EMAIL_VERIFICATION_INVALID: 'EMAIL_VERIFICATION_INVALID',
+  MFA_CODE_INVALID: 'MFA_CODE_INVALID',
+  MFA_CHALLENGE_INVALID: 'MFA_CHALLENGE_INVALID',
 } as const;
 
 export type ErrorCode = typeof errorCodes[keyof typeof errorCodes];

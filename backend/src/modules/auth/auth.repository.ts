@@ -6,6 +6,8 @@ export interface User {
   email: string;
   password_hash: string;
   email_verified: boolean;
+  totp_secret: string | null;
+  totp_enabled: boolean;
   created_at: Date;
 }
 
@@ -146,5 +148,34 @@ export const authRepository = {
     await db('email_verification_tokens')
       .where({ user_id: userId, used_at: null })
       .update({ used_at: new Date() });
+  },
+
+  /**
+   * Updates a user's TOTP secret key (used during setup).
+   *
+   * @param userId - Primary key ID of the user.
+   * @param secret - Unconfirmed TOTP secret key.
+   */
+  async updateUserTotpSecret(userId: number, secret: string | null): Promise<void> {
+    await db('users').where({ id: userId }).update({ totp_secret: secret });
+  },
+
+  /**
+   * Sets whether TOTP two-factor authentication is enabled for a user.
+   *
+   * @param userId - Primary key ID of the user.
+   * @param enabled - Boolean flag indicating if TOTP is active.
+   */
+  async setUserTotpEnabled(userId: number, enabled: boolean): Promise<void> {
+    await db('users').where({ id: userId }).update({ totp_enabled: enabled });
+  },
+
+  /**
+   * Clears TOTP secret and disables 2FA for a user.
+   *
+   * @param userId - Primary key ID of the user.
+   */
+  async clearUserTotp(userId: number): Promise<void> {
+    await db('users').where({ id: userId }).update({ totp_secret: null, totp_enabled: false });
   },
 };

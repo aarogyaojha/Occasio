@@ -14,4 +14,6 @@ export const errorMessages: Record<ErrorCode, string> = {
   [errorCodes.RATE_LIMITED]: 'Too many requests, please try again later',
   [errorCodes.EMAIL_NOT_VERIFIED]: 'Please verify your email before logging in',
   [errorCodes.EMAIL_VERIFICATION_INVALID]: 'Invalid, expired, or already used email verification token',
+  [errorCodes.MFA_CODE_INVALID]: 'Invalid verification code',
+  [errorCodes.MFA_CHALLENGE_INVALID]: 'Invalid or expired MFA challenge',
 };
