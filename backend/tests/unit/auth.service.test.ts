@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { generateSecret } from 'otplib';
 import { authService } from '../../src/modules/auth/auth.service';
 import { authRepository, User, RefreshToken, EmailVerificationToken } from '../../src/modules/auth/auth.repository';
 import { sendVerificationEmail } from '../../src/utils/sendVerificationEmail';
@@ -24,6 +25,9 @@ vi.mock('../../src/modules/auth/auth.repository', () => ({
     markVerificationTokenUsed: vi.fn(),
     markUserEmailVerified: vi.fn(),
     invalidateUserVerificationTokens: vi.fn(),
+    updateUserTotpSecret: vi.fn(),
+    setUserTotpEnabled: vi.fn(),
+    clearUserTotp: vi.fn(),
   },
 }));
 
@@ -37,6 +41,7 @@ vi.mock('bcrypt', () => ({
 vi.mock('jsonwebtoken', () => ({
   default: {
     sign: vi.fn(),
+    verify: vi.fn(),
   },
 }));
 
@@ -51,6 +56,8 @@ describe('Auth Service (Unit)', () => {
     email: 'alice@example.com',
     password_hash: 'hashed_password_abc123',
     email_verified: false,
+    totp_secret: null,
+    totp_enabled: false,
     created_at: new Date('2026-08-01'),
   };
 
@@ -189,8 +196,11 @@ describe('Auth Service (Unit)', () => {
         { expiresIn: ACCESS_TOKEN_EXPIRY }
       );
       expect(authRepository.storeRefreshToken).toHaveBeenCalledTimes(1);
-      expect(result.user).not.toHaveProperty('password_hash');
-      expect(result.accessToken).toBe('login_access_token');
+      expect(result.requiresTwoFactor).toBe(false);
+      if (!result.requiresTwoFactor) {
+        expect(result.user).not.toHaveProperty('password_hash');
+        expect(result.accessToken).toBe('login_access_token');
+      }
     });
   });
 
@@ -391,13 +401,85 @@ describe('Auth Service (Unit)', () => {
       const result = await authService.getCurrentUser(1);
 
       expect(result).not.toHaveProperty('password_hash');
+      expect(result).not.toHaveProperty('totp_secret');
       expect(result).toEqual({
         id: 1,
         name: 'Alice Smith',
         email: 'alice@example.com',
         email_verified: false,
+        totp_enabled: false,
         created_at: mockUser.created_at,
       });
+    });
+  });
+
+  describe('2FA Service Methods (Unit)', () => {
+    it('login returns challengeToken when totp_enabled is true', async () => {
+      const mockMfaUser: User = {
+        ...mockVerifiedUser,
+        totp_secret: 'JBSWY3DPEHPK3PXP',
+        totp_enabled: true,
+      };
+      vi.mocked(authRepository.findUserByEmail).mockResolvedValue(mockMfaUser);
+      vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
+      vi.mocked(jwt.sign).mockReturnValue('mfa_challenge_jwt_123' as any);
+
+      const result = await authService.login({
+        email: 'alice@example.com',
+        password: 'Password123!',
+      });
+
+      expect(result).toEqual({
+        requiresTwoFactor: true,
+        challengeToken: 'mfa_challenge_jwt_123',
+      });
+      expect(authRepository.storeRefreshToken).not.toHaveBeenCalled();
+    });
+
+    it('setupTwoFactor updates totp_secret and returns qrCodeDataUrl and secret', async () => {
+      vi.mocked(authRepository.findUserById).mockResolvedValue(mockVerifiedUser);
+      vi.mocked(authRepository.updateUserTotpSecret).mockResolvedValue();
+
+      const result = await authService.setupTwoFactor(1);
+
+      expect(authRepository.updateUserTotpSecret).toHaveBeenCalledWith(1, expect.any(String));
+      expect(result).toHaveProperty('qrCodeDataUrl');
+      expect(result).toHaveProperty('secret');
+      expect(result.qrCodeDataUrl).toMatch(/^data:image\/png;base64,/);
+    });
+
+    it('enableTwoFactor throws MFA_CODE_INVALID when code is wrong', async () => {
+      const mockUserWithSecret: User = {
+        ...mockVerifiedUser,
+        totp_secret: generateSecret(),
+        totp_enabled: false,
+      };
+      vi.mocked(authRepository.findUserById).mockResolvedValue(mockUserWithSecret);
+
+      await expect(authService.enableTwoFactor(1, '000000')).rejects.toThrowError(AppError);
+      expect(authRepository.setUserTotpEnabled).not.toHaveBeenCalled();
+    });
+
+    it('disableTwoFactor clears totp on valid code and rejects wrong code', async () => {
+      const mockUserMfa: User = {
+        ...mockVerifiedUser,
+        totp_secret: generateSecret(),
+        totp_enabled: true,
+      };
+      vi.mocked(authRepository.findUserById).mockResolvedValue(mockUserMfa);
+
+      await expect(authService.disableTwoFactor(1, '000000')).rejects.toThrowError(AppError);
+      expect(authRepository.clearUserTotp).not.toHaveBeenCalled();
+    });
+
+    it('verifyTwoFactorLogin throws MFA_CHALLENGE_INVALID if challenge token is invalid', async () => {
+      vi.mocked(jwt.verify).mockImplementation(() => {
+        throw new Error('invalid token');
+      });
+
+      await expect(
+        authService.verifyTwoFactorLogin('bad_challenge_token', '123456')
+      ).rejects.toThrowError(AppError);
     });
   });
 });

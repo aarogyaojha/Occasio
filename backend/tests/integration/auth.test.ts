@@ -10,6 +10,7 @@ import { sendResponse } from '../../src/utils/sendResponse';
 import { resetRateLimiters } from '../../src/middleware/rateLimiter.middleware';
 import { errorCodes, errorMessages, REFRESH_TOKEN_COOKIE_NAME, httpStatus } from '../../src/constants';
 import { sendVerificationEmail } from '../../src/utils/sendVerificationEmail';
+import { generateSync } from 'otplib';
 
 vi.mock('../../src/utils/sendVerificationEmail', () => ({
   sendVerificationEmail: vi.fn().mockResolvedValue(undefined),
@@ -401,6 +402,111 @@ describe('Auth Module Integration Tests', () => {
         .set('Cookie', [cookieValue]);
 
       expect(replayRes.status).toBe(httpStatus.UNAUTHORIZED);
+    });
+  });
+
+  describe('2FA (TOTP) Full Lifecycle & Security Integration Tests', () => {
+    it('should run full 2FA lifecycle and verify security isolation of challengeToken', async () => {
+      // 1. Register & verify user
+      await request(app)
+        .post('/auth/signup')
+        .send({
+          name: 'TOTP User',
+          email: 'totp@example.com',
+          password: 'password123',
+        });
+      await db('users').where({ email: 'totp@example.com' }).update({ email_verified: true });
+
+      // Initial login to get access token for setup
+      const initialLoginRes = await request(app)
+        .post('/auth/login')
+        .send({ email: 'totp@example.com', password: 'password123' });
+      const userAccessToken = initialLoginRes.body.data.accessToken;
+
+      // 2. Setup 2FA
+      const setupRes = await request(app)
+        .post('/auth/2fa/setup')
+        .set('Authorization', `Bearer ${userAccessToken}`);
+
+      expect(setupRes.status).toBe(httpStatus.OK);
+      expect(setupRes.body.data).toHaveProperty('qrCodeDataUrl');
+      expect(setupRes.body.data).toHaveProperty('secret');
+      const secret = setupRes.body.data.secret;
+
+      // 3. Enable 2FA with valid TOTP code
+      const validCode = generateSync({ secret });
+      const enableRes = await request(app)
+        .post('/auth/2fa/enable')
+        .set('Authorization', `Bearer ${userAccessToken}`)
+        .send({ code: validCode });
+
+      expect(enableRes.status).toBe(httpStatus.OK);
+      expect(enableRes.body.data.message).toMatch(/enabled successfully/i);
+
+      // 4. Login after 2FA enabled -> should return challengeToken, NO refresh cookie, NO access token
+      const mfaLoginRes = await request(app)
+        .post('/auth/login')
+        .send({ email: 'totp@example.com', password: 'password123' });
+
+      expect(mfaLoginRes.status).toBe(httpStatus.OK);
+      expect(mfaLoginRes.body.data.requiresTwoFactor).toBe(true);
+      expect(mfaLoginRes.body.data).toHaveProperty('challengeToken');
+      expect(mfaLoginRes.body.data).not.toHaveProperty('accessToken');
+      expect(mfaLoginRes.headers['set-cookie']).toBeUndefined();
+
+      const challengeToken = mfaLoginRes.body.data.challengeToken;
+
+      // 5. SECURITY PROOF TEST: Ensure challengeToken is REJECTED by authenticate middleware on protected routes
+      const unauthorizedBearerRes = await request(testApp)
+        .get('/protected')
+        .set('Authorization', `Bearer ${challengeToken}`);
+
+      expect(unauthorizedBearerRes.status).toBe(httpStatus.UNAUTHORIZED);
+      expect(unauthorizedBearerRes.body.error.code).toBe(errorCodes.AUTH_TOKEN_INVALID);
+
+      // 6. Verify-login with wrong TOTP code -> 401
+      resetRateLimiters();
+      const wrongVerifyRes = await request(app)
+        .post('/auth/2fa/verify-login')
+        .send({ challengeToken, code: '000000' });
+
+      expect(wrongVerifyRes.status).toBe(httpStatus.UNAUTHORIZED);
+      expect(wrongVerifyRes.body.error).toEqual({
+        code: 'MFA_CODE_INVALID',
+        message: 'Invalid verification code',
+      });
+
+      // 7. Verify-login with correct TOTP code -> 200 + tokens + refresh cookie
+      const currentValidCode = generateSync({ secret });
+      const correctVerifyRes = await request(app)
+        .post('/auth/2fa/verify-login')
+        .send({ challengeToken, code: currentValidCode });
+
+      expect(correctVerifyRes.status).toBe(httpStatus.OK);
+      expect(correctVerifyRes.body.data).toHaveProperty('accessToken');
+      expect(correctVerifyRes.body.data.user).toHaveProperty('email', 'totp@example.com');
+      expect(correctVerifyRes.headers['set-cookie']).toBeDefined();
+
+      const authenticatedAccessToken = correctVerifyRes.body.data.accessToken;
+
+      // 8. Disable 2FA with valid TOTP code
+      const disableCode = generateSync({ secret });
+      const disableRes = await request(app)
+        .post('/auth/2fa/disable')
+        .set('Authorization', `Bearer ${authenticatedAccessToken}`)
+        .send({ code: disableCode });
+
+      expect(disableRes.status).toBe(httpStatus.OK);
+      expect(disableRes.body.data.message).toMatch(/disabled successfully/i);
+
+      // 9. Login again -> normal login without 2FA prompt
+      const postDisableLoginRes = await request(app)
+        .post('/auth/login')
+        .send({ email: 'totp@example.com', password: 'password123' });
+
+      expect(postDisableLoginRes.status).toBe(httpStatus.OK);
+      expect(postDisableLoginRes.body.data).toHaveProperty('accessToken');
+      expect(postDisableLoginRes.body.data.requiresTwoFactor).not.toBe(true);
     });
   });
 });
