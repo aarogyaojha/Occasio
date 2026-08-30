@@ -36,7 +36,7 @@ export const useAuth = () => {
   const loginMutation = useMutation<AuthResponseData, ApiBackendError, LoginInput>({
     mutationFn: (data: LoginInput) => loginApi(data),
     onSuccess: (data) => {
-      if (!data.requiresTwoFactor) {
+      if ('user' in data) {
         setAuth(data.user, data.accessToken);
       }
     },
