@@ -6,16 +6,86 @@ A full-stack event planning platform built with Node.js, Express, TypeScript, Kn
 
 ## Screenshots
 
-Placeholders for application UI screenshots (save captured images into `docs/screenshots/`):
+Save captured images into `docs/screenshots/` with these exact filenames:
 
-![Events List](docs/screenshots/events-list.png)  
-*Events List Page — Displaying event grid, search/tag filter bar, and RSVP status badges.*
+![Events List](docs/screenshots/events-list.png)
+*Events List — event grid with search/tag filter bar and RSVP status counts.*
 
-![Create Event Form](docs/screenshots/create-event.png)  
-*Create Event Form — Interface for creating new public or private events with tag selection.*
+![Create Event Form](docs/screenshots/create-event.png)
+*Create Event Form — title, date/time presets, location, visibility, and tag autocomplete.*
 
-![Event Detail Page](docs/screenshots/event-detail.png)  
-*Event Detail Page — Detailed event information, creator actions, tag badges, and interactive RSVP controls.*
+![Event Detail Page](docs/screenshots/event-detail.png)
+*Event Detail Page — full details, tags, owner actions, and interactive RSVP controls.*
+
+![Login](docs/screenshots/login.png)
+*Login Page — monochrome auth UI.*
+
+![2FA Login Challenge](docs/screenshots/twofa-challenge.png)
+*Two-Factor Login Challenge — 6-digit code entry step for 2FA-enabled accounts.*
+
+![2FA Setup](docs/screenshots/settings-2fa-setup.png)
+*Settings — Two-Factor Authentication setup with QR code and manual key fallback.*
+
+![API Documentation](docs/screenshots/api-docs.png)
+*Interactive Swagger/OpenAPI documentation at `/api-docs`.*
+
+---
+
+## Features Checklist
+
+Mapped directly against the assessment spec.
+
+### Core Features
+
+| Requirement | Status |
+| --- | --- |
+| Create / edit / delete events | Done |
+| View upcoming and past events | Done |
+| View single event details | Done |
+| Tags & categories on events | Done |
+| Filter by tag | Done |
+| Filter by event type (public/private) | Done |
+| User signup & login | Done |
+| JWT authentication | Done |
+| Ownership authorization (only creator can edit/delete) | Done |
+| Server-side pagination & filtering | Done |
+| Normalized database schema | Done |
+| No ORM (Knex.js query builder only) | Done |
+
+### Optional / Bonus Features
+
+| Feature | Status |
+| --- | --- |
+| Knex migrations & seeds | Done |
+| Backend request/error logging | Done |
+| Reusable UI components (shadcn/ui primitives) | Done |
+| Unit tests (mocked services) | Done |
+| Integration tests (real DB) | Done |
+| Swagger / OpenAPI documentation | Done |
+| Refresh token rotation | Done |
+| Two-Factor Authentication (TOTP) | Done |
+| Email verification | Done |
+| Search | Done |
+| Sorting | Done |
+| RSVP system (Yes/No/Maybe) | Done |
+
+---
+
+## Tech Stack
+
+| Layer | Choice |
+| --- | --- |
+| Backend | Node.js, Express, TypeScript |
+| Database | MySQL 8, Knex.js (no ORM) |
+| Validation | Zod |
+| Auth | JWT (access + refresh), bcrypt, TOTP (otplib), Nodemailer |
+| Frontend | React 18, TypeScript, Vite |
+| Styling | Tailwind CSS v4, shadcn/ui (monochrome theme) |
+| Server state | TanStack Query |
+| Client state | Zustand (auth session only) |
+| Forms | react-hook-form + Zod |
+| Testing | Vitest, Supertest |
+| Docs | Swagger (swagger-jsdoc + swagger-ui-express) |
 
 ---
 
@@ -84,7 +154,7 @@ Every API endpoint adheres to uniform JSON response envelopes:
 
 ### 7. Dual-Tier Rate Limiting
 
-- **Strict Auth Limiter**: Applied to sensitive authentication endpoints (`/auth/login`, `/auth/signup`, `/auth/refresh`) to prevent brute-force attacks.
+- **Strict Auth Limiter**: Applied to sensitive authentication endpoints (`/auth/login`, `/auth/signup`, `/auth/refresh`, `/auth/2fa/*`) to prevent brute-force attacks.
 - **General API Limiter**: Applied globally to protect API endpoints against DDoS and excessive traffic abuse.
 - **Standard Envelope on 429**: Custom rate limit handlers format `429 Too Many Requests` responses using the standard JSON error envelope (`RATE_LIMITED`).
 
@@ -98,32 +168,39 @@ Every API endpoint adheres to uniform JSON response envelopes:
 
 - **Unique Constraint**: Database constraint `(user_id, event_id)` enforces exactly one RSVP record per user per event.
 - **Upsert-in-Place**: Status transitions (`yes`, `maybe`, `no`) utilize `ON DUPLICATE KEY UPDATE` to eliminate duplicate rows while keeping state updates atomic.
+- **Visibility-Gated**: RSVP endpoints verify event visibility first. Attempting to RSVP to a private event that the requesting user cannot access returns `404 Not Found` (`EVENT_NOT_FOUND`), consistent with how the event itself would be hidden.
 
-### 10. TOTP-Based Two-Factor Authentication (2FA)
+### 10. Email Verification
 
-- **Standard Authenticator Support**: TOTP-based two-factor authentication, compatible with any standard authenticator app.
-- **Opt-in Setup & Verification**: Users generate a TOTP secret and QR code at `/auth/2fa/setup` and confirm activation via `/auth/2fa/enable` using a 6-digit code.
-- **Challenge Token Isolation**: When 2FA is active, initial login produces a short-lived `mfa_challenge` JWT signed with a distinct `MFA_CHALLENGE_SECRET`. This challenge token is strictly scoped to 2FA verification (`POST /auth/2fa/verify-login`) and cannot be used as an access token for protected routes.
-- **Strict Verification for Disabling**: Disabling 2FA via `/auth/2fa/disable` requires a valid 6-digit TOTP code to prevent unauthorized deactivation.
-- **Visibility-Gated**: RSVP endpoints verify event visibility first. Attempting to RSVP to a private event that the requesting user cannot access returns `404 Not Found` (`EVENT_NOT_FOUND`).
+- **Blocked Login Until Verified**: Newly registered accounts cannot log in until their email is verified — `login` checks `email_verified` and rejects with `403 EMAIL_NOT_VERIFIED` if the account hasn't confirmed yet.
+- **Cryptographically Random Tokens**: Verification tokens are generated with `crypto.randomBytes(32)`, hashed before storage, and expire after 24 hours.
+- **Real Delivery + Local Fallback**: Verification links are sent via Gmail SMTP (Nodemailer) and also logged to the console, so the flow is fully testable without depending on a working mail delivery in every environment.
+- **Non-Leaking Resend**: `POST /auth/resend-verification` always returns the same generic success message regardless of whether the email exists, to avoid confirming which addresses are registered.
 
-### 10. Two-Tier Testing Strategy
+### 11. TOTP-Based Two-Factor Authentication (2FA)
+
+- **Standard Authenticator Support**: TOTP-based two-factor authentication, compatible with any standard authenticator app (Google Authenticator, Authy, etc.) — not tied to any specific provider.
+- **Opt-in Setup & Verification**: Users generate a TOTP secret and QR code at `/auth/2fa/setup` and confirm activation via `/auth/2fa/enable` using a 6-digit code, from a dedicated Settings page.
+- **Challenge Token Isolation**: When 2FA is active, initial login produces a short-lived `mfa_challenge` JWT signed with a distinct `MFA_CHALLENGE_SECRET` — a separate secret from the one used for real access tokens. This is a deliberate security boundary: the challenge token is scoped strictly to completing 2FA (`POST /auth/2fa/verify-login`) and is rejected by the standard auth middleware if presented as a Bearer access token on any protected route.
+- **Strict Verification for Disabling**: Disabling 2FA via `/auth/2fa/disable` requires a valid current 6-digit TOTP code, not just a button click, to prevent unauthorized deactivation.
+
+### 12. Two-Tier Testing Strategy
 
 - **Unit Tests** (`npm run test:unit --workspace=backend`): Fast, isolated test suite using Vitest with mocked repository layers. Validates business logic, authorization rules, and edge cases in milliseconds without database setup.
 - **Integration Tests** (`npm run test:integration --workspace=backend`): Full HTTP flow tests using Supertest against a live MySQL test database. Verifies actual Knex SQL queries, schema constraints, middleware execution, and token rotation.
 - **Why Both?**: Unit tests deliver instant feedback during active development, while integration tests guarantee end-to-end system correctness across the HTTP transport and database layer.
 
-### 11. Request & Error Logging
+### 13. Request & Error Logging
 
 - **HTTP Access Logs**: Structured request logging via `morgan` middleware formatting status codes, response times, and HTTP verbs.
 - **Tiered Error Logging**: Client-side operational errors (4xx validation or auth errors) generate concise warning log entries, while full stack traces are logged exclusively for unexpected 5xx server errors to keep production logs clean and actionable.
 
-### 12. Frontend Component Architecture & Monochrome UI Design
+### 14. Frontend Component Architecture & Monochrome UI Design
 
 - **Feature-Based Modular Structure**: Code organized by domain feature inside `frontend/src/features/*` (`auth`, `events`) alongside reusable routing, state hooks, and API clients.
-- **Accessible UI Primitives (shadcn/ui & Base UI)**: Styled components (`frontend/src/components/ui/`) built on Base UI primitives and styled via Tailwind CSS.
-- **State Management**: TanStack Query (`react-query`) handles server state caching, background refetching, and optimistic updates for RSVPs, paired with Zustand for global auth session state.
-- **Strict Monochrome Design**: Built with Tailwind CSS adhering to a high-contrast monochrome aesthetic (black, white, zinc/neutral scale).
+- **Accessible UI Primitives (shadcn/ui)**: Styled components (`frontend/src/components/ui/`) built on accessible Radix-based primitives and styled via Tailwind CSS.
+- **State Management**: TanStack Query handles server state caching, background refetching, and updates (including RSVPs), paired with Zustand for global auth session state only.
+- **Strict Monochrome Design**: Built with Tailwind CSS adhering to a high-contrast monochrome aesthetic (black, white, zinc/neutral scale) — no color accents or gradients.
 
 ---
 
@@ -143,11 +220,19 @@ cp .env.example .env
 cp frontend/.env.example frontend/.env
 ```
 
-Ensure database credentials, server port, and JWT secrets in `.env` match your local environment.
+Fill in the backend `.env` with:
+
+- Database credentials, server port, and JWT secrets
+- `MFA_CHALLENGE_SECRET` — a separate secret for 2FA challenge tokens (distinct from `JWT_ACCESS_SECRET`)
+- `FRONTEND_URL` — used to build verification/reset links (e.g. `http://localhost:5173`)
+- `GMAIL_USER` / `GMAIL_APP_PASSWORD` — for sending real verification emails via Gmail SMTP.
+  **Gmail requires an App Password, not your regular account password** — enable
+  2-Step Verification on the Google account, then generate one at
+  <https://myaccount.google.com/apppasswords>. If these are left as placeholders,
+  email sending will fail silently and fall back to the console-logged link, which
+  is still sufficient for local testing.
 
 ### 2. Start MySQL Database
-
-Launch the MySQL container in the background using Docker Compose:
 
 ```bash
 docker compose up -d
@@ -155,15 +240,11 @@ docker compose up -d
 
 ### 3. Install Dependencies
 
-Install all workspace dependencies from the root directory:
-
 ```bash
 npm install
 ```
 
 ### 4. Run Database Migrations
-
-Execute Knex migrations to create database tables (`users`, `refresh_tokens`, `events`, `tags`, `event_tags`, `event_rsvps`):
 
 ```bash
 npm run db:migrate --workspace=backend
@@ -171,7 +252,7 @@ npm run db:migrate --workspace=backend
 
 ### 5. Start Backend & Frontend Dev Servers
 
-Both backend and frontend servers must be running simultaneously for the application to work properly:
+Both servers must run simultaneously.
 
 #### Terminal 1 — Backend API Server (Port 4000)
 
@@ -187,14 +268,10 @@ npm run dev --workspace=frontend
 
 ### 6. Verify Application & API Documentation
 
-Open your browser and navigate to:
-
 - **Frontend Application**: [http://localhost:5173](http://localhost:5173)
 - **Backend API & Swagger Docs**: [http://localhost:4000/api-docs](http://localhost:4000/api-docs)
 
 ### 7. Run Test Suite
-
-Execute the integration and unit test suites across all modules:
 
 ```bash
 # Run all workspace tests
@@ -214,3 +291,5 @@ npm run test:integration --workspace=backend
 - **Private Event Visibility**: Events with `event_type = 'private'` are strictly visible only to their creator. When queried by unauthenticated visitors or other users, private events are excluded from `GET /events` listings, and direct lookups via `GET /events/:id` return `404 Not Found` (`EVENT_NOT_FOUND`) rather than `403 Forbidden`. This avoids confirming or leaking the existence of private events to unauthorized parties.
 - **Tag Filtering Semantics**: Tag filtering on `GET /events` uses "any tag matches" semantics — an event matching at least one requested tag is included, not requiring all requested tags to match.
 - **RSVP Visibility Constraints**: Users can only submit RSVPs for public events or private events they own. RSVP requests for non-existent or inaccessible private events return `404 Not Found`.
+- **Email Verification Blocking**: Login is blocked entirely until the account's email is verified. Since no production mail infrastructure is assumed for this assessment, verification emails are sent via Gmail SMTP with a console-logged fallback link for local/offline review.
+- **2FA Provider-Agnostic**: Two-factor authentication is implemented against the open TOTP standard (RFC 6238) rather than any specific vendor — it works with Google Authenticator, Authy, or any compatible app.
