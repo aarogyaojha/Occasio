@@ -98,6 +98,13 @@ Every API endpoint adheres to uniform JSON response envelopes:
 
 - **Unique Constraint**: Database constraint `(user_id, event_id)` enforces exactly one RSVP record per user per event.
 - **Upsert-in-Place**: Status transitions (`yes`, `maybe`, `no`) utilize `ON DUPLICATE KEY UPDATE` to eliminate duplicate rows while keeping state updates atomic.
+
+### 10. TOTP-Based Two-Factor Authentication (2FA)
+
+- **Standard Authenticator Support**: TOTP-based two-factor authentication, compatible with any standard authenticator app.
+- **Opt-in Setup & Verification**: Users generate a TOTP secret and QR code at `/auth/2fa/setup` and confirm activation via `/auth/2fa/enable` using a 6-digit code.
+- **Challenge Token Isolation**: When 2FA is active, initial login produces a short-lived `mfa_challenge` JWT signed with a distinct `MFA_CHALLENGE_SECRET`. This challenge token is strictly scoped to 2FA verification (`POST /auth/2fa/verify-login`) and cannot be used as an access token for protected routes.
+- **Strict Verification for Disabling**: Disabling 2FA via `/auth/2fa/disable` requires a valid 6-digit TOTP code to prevent unauthorized deactivation.
 - **Visibility-Gated**: RSVP endpoints verify event visibility first. Attempting to RSVP to a private event that the requesting user cannot access returns `404 Not Found` (`EVENT_NOT_FOUND`).
 
 ### 10. Two-Tier Testing Strategy
@@ -167,11 +174,13 @@ npm run db:migrate --workspace=backend
 Both backend and frontend servers must be running simultaneously for the application to work properly:
 
 #### Terminal 1 — Backend API Server (Port 4000)
+
 ```bash
 npm run dev --workspace=backend
 ```
 
 #### Terminal 2 — Frontend Dev Server (Port 5173)
+
 ```bash
 npm run dev --workspace=frontend
 ```
