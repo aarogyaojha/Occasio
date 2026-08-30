@@ -46,7 +46,8 @@ apiClient.interceptors.response.use(
     const isAuthEndpoint =
       url.includes('/auth/login') ||
       url.includes('/auth/signup') ||
-      url.includes('/auth/refresh');
+      url.includes('/auth/refresh') ||
+      url.includes('/auth/2fa');
 
     if (
       error.response?.status === 401 &&
