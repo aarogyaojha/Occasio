@@ -4,6 +4,8 @@ export interface User {
   id: number | string;
   name: string;
   email: string;
+  email_verified?: boolean;
+  totp_enabled?: boolean;
   created_at?: string;
   [key: string]: unknown;
 }

@@ -48,6 +48,16 @@ export const Navbar: React.FC = () => {
             >
               + New Event
             </Link>
+            <Link
+              to="/settings"
+              className={`px-3 py-1.5 rounded-sm border transition-colors ${
+                isActive('/settings')
+                  ? 'border-zinc-100 text-zinc-100 bg-zinc-900 font-semibold'
+                  : 'border-transparent text-zinc-400 hover:text-zinc-200 hover:border-zinc-800'
+              }`}
+            >
+              Settings
+            </Link>
           </nav>
         </div>
 

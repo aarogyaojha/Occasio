@@ -5,7 +5,13 @@ import {
   logout as logoutApi,
   verifyEmail as verifyEmailApi,
   resendVerification as resendVerificationApi,
+  setupTwoFactor as setupTwoFactorApi,
+  enableTwoFactor as enableTwoFactorApi,
+  disableTwoFactor as disableTwoFactorApi,
+  verifyTwoFactorLogin as verifyTwoFactorLoginApi,
   type SignupResponseData,
+  type AuthResponseData,
+  type SetupTwoFactorResponseData,
   type MessageResponseData,
 } from '../../api/auth';
 import { useAuthStore, type User } from './authStore';
@@ -27,14 +33,12 @@ export const useAuth = () => {
     mutationFn: (data: SignupInput) => signupApi(data),
   });
 
-  const loginMutation = useMutation<
-    { user: User; accessToken: string },
-    ApiBackendError,
-    LoginInput
-  >({
+  const loginMutation = useMutation<AuthResponseData, ApiBackendError, LoginInput>({
     mutationFn: (data: LoginInput) => loginApi(data),
     onSuccess: (data) => {
-      setAuth(data.user, data.accessToken);
+      if (!data.requiresTwoFactor) {
+        setAuth(data.user, data.accessToken);
+      }
     },
   });
 
@@ -44,6 +48,29 @@ export const useAuth = () => {
 
   const resendVerificationMutation = useMutation<MessageResponseData, ApiBackendError, string>({
     mutationFn: (email: string) => resendVerificationApi(email),
+  });
+
+  const setupTwoFactorMutation = useMutation<SetupTwoFactorResponseData, ApiBackendError, void>({
+    mutationFn: () => setupTwoFactorApi(),
+  });
+
+  const enableTwoFactorMutation = useMutation<MessageResponseData, ApiBackendError, string>({
+    mutationFn: (code: string) => enableTwoFactorApi(code),
+  });
+
+  const disableTwoFactorMutation = useMutation<MessageResponseData, ApiBackendError, string>({
+    mutationFn: (code: string) => disableTwoFactorApi(code),
+  });
+
+  const verifyTwoFactorLoginMutation = useMutation<
+    { user: User; accessToken: string },
+    ApiBackendError,
+    { challengeToken: string; code: string }
+  >({
+    mutationFn: ({ challengeToken, code }) => verifyTwoFactorLoginApi(challengeToken, code),
+    onSuccess: (data) => {
+      setAuth(data.user, data.accessToken);
+    },
   });
 
   const logoutMutation = useMutation<void, ApiBackendError, void>({
@@ -67,10 +94,18 @@ export const useAuth = () => {
     logout: logoutMutation.mutateAsync,
     verifyEmail: verifyEmailMutation.mutateAsync,
     resendVerification: resendVerificationMutation.mutateAsync,
+    setupTwoFactor: setupTwoFactorMutation.mutateAsync,
+    enableTwoFactor: enableTwoFactorMutation.mutateAsync,
+    disableTwoFactor: disableTwoFactorMutation.mutateAsync,
+    verifyTwoFactorLogin: verifyTwoFactorLoginMutation.mutateAsync,
     signupMutation,
     loginMutation,
     verifyEmailMutation,
     resendVerificationMutation,
+    setupTwoFactorMutation,
+    enableTwoFactorMutation,
+    disableTwoFactorMutation,
+    verifyTwoFactorLoginMutation,
     logoutMutation,
   };
 };

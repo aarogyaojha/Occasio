@@ -13,6 +13,7 @@ import { EventsListPage } from './routes/EventsListPage';
 import { EventDetailPage } from './routes/EventDetailPage';
 import { CreateEventPage } from './routes/CreateEventPage';
 import { EditEventPage } from './routes/EditEventPage';
+import { SettingsPage } from './routes/SettingsPage';
 import './index.css';
 
 const queryClient = new QueryClient({
@@ -42,6 +43,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                 <Route path="events/new" element={<CreateEventPage />} />
                 <Route path="events/:id" element={<EventDetailPage />} />
                 <Route path="events/:id/edit" element={<EditEventPage />} />
+                <Route path="settings" element={<SettingsPage />} />
               </Route>
               <Route path="*" element={<Navigate to="/events" replace />} />
             </Route>

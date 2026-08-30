@@ -7,9 +7,20 @@ export interface SignupResponseData {
   message: string;
 }
 
-export interface AuthResponseData {
-  user: User;
-  accessToken: string;
+export type AuthResponseData =
+  | {
+      requiresTwoFactor: true;
+      challengeToken: string;
+    }
+  | {
+      requiresTwoFactor?: false;
+      user: User;
+      accessToken: string;
+    };
+
+export interface SetupTwoFactorResponseData {
+  qrCodeDataUrl: string;
+  secret: string;
 }
 
 export interface RefreshResponseData {
@@ -142,6 +153,68 @@ export const logout = async (): Promise<MessageResponseData> => {
 export const getMe = async (): Promise<User> => {
   try {
     const response = await apiClient.get<{ success: boolean; data: User }>('/auth/me');
+    return response.data.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+/**
+ * Initiates TOTP two-factor setup for the authenticated user.
+ */
+export const setupTwoFactor = async (): Promise<SetupTwoFactorResponseData> => {
+  try {
+    const response = await apiClient.post<{ success: boolean; data: SetupTwoFactorResponseData }>(
+      '/auth/2fa/setup'
+    );
+    return response.data.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+/**
+ * Confirms 6-digit TOTP code and enables 2FA.
+ */
+export const enableTwoFactor = async (code: string): Promise<MessageResponseData> => {
+  try {
+    const response = await apiClient.post<{ success: boolean; data: MessageResponseData }>(
+      '/auth/2fa/enable',
+      { code }
+    );
+    return response.data.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+/**
+ * Confirms 6-digit TOTP code and disables 2FA.
+ */
+export const disableTwoFactor = async (code: string): Promise<MessageResponseData> => {
+  try {
+    const response = await apiClient.post<{ success: boolean; data: MessageResponseData }>(
+      '/auth/2fa/disable',
+      { code }
+    );
+    return response.data.data;
+  } catch (error) {
+    return handleApiError(error);
+  }
+};
+
+/**
+ * Verifies 2FA challenge token and TOTP code to complete login.
+ */
+export const verifyTwoFactorLogin = async (
+  challengeToken: string,
+  code: string
+): Promise<{ user: User; accessToken: string }> => {
+  try {
+    const response = await apiClient.post<{
+      success: boolean;
+      data: { user: User; accessToken: string };
+    }>('/auth/2fa/verify-login', { challengeToken, code });
     return response.data.data;
   } catch (error) {
     return handleApiError(error);
